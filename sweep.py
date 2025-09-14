@@ -67,7 +67,6 @@ def main():
     ap.add_argument('--save_prompt', action='store_true')
     ap.add_argument('--save_raw_output', action='store_true')
     ap.add_argument('--root', type=str, default='runs')
-    ap.add_argument('--flat_outputs', action='store_true', help='write outputs in a single summary dir with tagged filenames')
     # Extras
     ap.add_argument('--order_trials', type=int, default=1)
     ap.add_argument('--baseline', type=str, default='', choices=['', 'pointer_f_n1'])
@@ -90,9 +89,8 @@ def main():
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
     root = Path(args.root) / f'sweep_{ts}'
     ensure_dir(root)
-    if args.flat_outputs:
-        flat_dir = root / 'flat'
-        ensure_dir(flat_dir)
+    flat_dir = root / 'flat'
+    ensure_dir(flat_dir)
     data_dir = Path('data')
     ensure_dir(data_dir)
 
@@ -110,16 +108,10 @@ def main():
         else:
             n, mval, seed = combo
             tag = f"imp_n{n}_m{mval}_s{seed}"
-        out_dir = root / tag
-        if not args.flat_outputs:
-            ensure_dir(out_dir)
+        out_dir = root / tag  # retained for dir field only; artifacts go to flat_dir
         ds_path = data_dir / f"synth_{tag}.jsonl"
-        if args.flat_outputs:
-            res_path = (flat_dir / f"results_{tag}.jsonl")
-            sum_path = (flat_dir / f"summary_{tag}.txt")
-        else:
-            res_path = out_dir / 'results.jsonl'
-            sum_path = out_dir / 'summary.txt'
+        res_path = (flat_dir / f"results_{tag}.jsonl")
+        sum_path = (flat_dir / f"summary_{tag}.txt")
 
         # 1) Generate
         print(f"[{idx}/{total_combos}] GEN {tag} ...", flush=True)
@@ -150,10 +142,7 @@ def main():
             if args.ablate_inner:
                 gen_cmd += ['--ablate_inner', '--ablate_hop', str(args.ablate_hop)]
         rc, out = run_cmd(gen_cmd)
-        if args.flat_outputs:
-            (flat_dir / f'gen_stdout_{tag}.txt').write_text(out, encoding='utf-8')
-        else:
-            (out_dir / 'gen_stdout.txt').write_text(out, encoding='utf-8')
+        (flat_dir / f'gen_stdout_{tag}.txt').write_text(out, encoding='utf-8')
         if rc != 0:
             print(f"[{idx}/{total_combos}] GEN FAIL {tag}", flush=True)
             continue

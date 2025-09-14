@@ -135,6 +135,12 @@ python exp.py report --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach
 
 Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/index.csv` (ignored by git).
 
+Sweep output layout (default)
+- Artifacts are written under `runs/sweep_<timestamp>/flat/` as:
+  - `results_<tag>.jsonl`
+  - `summary_<tag>.txt`
+  - `gen_stdout_<tag>.txt`
+
 ## Diagnostics and baselines
 
 - Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
@@ -143,6 +149,17 @@ Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/ind
 - Path-collision stress (explicit): generator flag `--path_collision_stress` ensures coherent distractor paths across ladder levels in candidate blocks.
 - Head-cue mitigation (explicit): `--block_head_balance` equalizes head exposure per ladder block (against prior printed content), and `--alias_heads_per_block` prints a block-local alias map to neutralize identity cues.
 - Lift-over-chance plots: plotting adds lift overlays for both approaches.
+
+### Analyzer metrics (explicit)
+
+Run:
+```
+python explicit/analyze_errors.py --in runs/<tag>/results.jsonl
+```
+Outputs include per-block signals:
+- `f_n correct`: whether final choice matches gold
+- `f_{n-1} coherent-from-chain`: chosen f_n head reachable from y_{n-2} via some f_{n-1}
+- `f_{n-2} from-chain`: existence of y_{n-3} → y_{n-2} support in f_{n-2} candidates
 
 ## Current snapshot
 

@@ -39,7 +39,13 @@ def build_prompt(item: Dict[str, Any]) -> str:
     cand_sections: list[str] = []
     for i, triples in dynamic_blocks:
         triples_block = "\n".join(f"{h} ->{r}-> {t}" for h, r, t in triples)
-        cand_sections.append(f"Candidates for f{i}:\n{triples_block}")
+        # If alias map for this block exists, render it just above the candidates
+        alias_key = f"alias_map_f{i}"
+        alias_map = item.get(alias_key)
+        alias_block = ""
+        if isinstance(alias_map, list) and alias_map:
+            alias_block = "Alias map (balanced):\n" + "\n".join(f"{a} {eq} {h}" for a, eq, h in alias_map) + "\n"
+        cand_sections.append(f"{alias_block}Candidates for f{i}:\n{triples_block}")
 
     cand_text = "\n".join(cand_sections)
     return (

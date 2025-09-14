@@ -3,15 +3,15 @@
 This document summarizes the results and insights from the current benchmark, which measures multi-step composition over symbolic n-hop chains using an open-book prompt with laddered candidate sets.
 
 ## Setup summary
-- Model (unless stated): gpt-4.1-mini, temp=0.0.
+- Defaults (unless stated): model=gpt-4.1-mini, temp=0.0, M=256.
 - Data: synthetic layers L0..Ln with bijective maps f1..fn (random permutations).
 - Explicit prompt (laddered):
   - Facts: shuffled chain triples for f1..f{n−2}, mixed with K distractor chains (multi-chain context).
-  - Candidates: sets for f{n−2}, f{n−1}, and f_n (three-level ladder). Earlier variants used only f{n−1} and f_n (two-level) or no candidates (chain-only).
+  - Candidates: sets for f{n−2}, f{n−1}, and f_n (decision depth L controls how many trailing functions are laddered).
 - Implicit prompt (bag-of-facts):
   - Facts: m chains’ first n−1 hops (balanced exactly m lines per relation), shuffled.
 - Answers: explicit → final token a = f_n(y_{n−1}); implicit → y_{n−1} token.
-- Metric: Exact Match (EM) with normalization.
+- Metric: Exact Match (EM) with normalization. Plots include lift-over-chance overlays.
 
 Additional diagnostics supported:
 - Order invariance (`--order_trials T`): reshuffle displays T times; ΔEM ≈ 0 expected.
@@ -25,7 +25,7 @@ Additional diagnostics supported:
 - Chain-only (f1..f{n−1} shown, no candidates): EM ≈ 1.000 at n=4 (trivial; answer can be read directly).
 - Two-level ladder (f{n−1}, f_n), single-chain facts: high EM even at larger n (e.g., n=5 → 0.920; n=8 → 0.950). Difficulty does not scale with n because head-equality cues suffice.
 
-### B. Explicit (multi-chain + shuffled facts + three-level ladder)
+### B. Explicit (multi-chain + shuffled facts + laddered candidates)
 - Parameters (latest sweep 2025-09-14): items=24, k0=k1=k2=6, context_chains=8, M=256, seeds∈{7,13,23}, model=gpt-4.1-mini, temp=0.0.
 - Per-seed EM (n=4..6):
   - n=4: 0.958, 0.958, 1.000 (mean±sd ≈ 0.972±0.020)
@@ -65,6 +65,30 @@ Lift-over-chance (qualitative):
 - Implicit lift decreases with n and m; near-chance behavior at higher n/m.
 - Explicit lift drops after head-cue mitigation; L=3 no longer clearly exceeds L=2.
 
+## Metrics and diagnostics
+- Lift-over-chance:
+  - Explicit: lift = (EM − 1/k_last) / (1 − 1/k_last)
+  - Implicit: lift = (EM − 1/m) / (1 − 1/m)
+- Analyzer (explicit):
+  - f_n correct (pred==gold)
+  - f_{n−1} coherent-from-chain (chosen f_n head reachable from y_{n−2} via some f_{n−1})
+  - f_{n−2} from-chain (y_{n−3} → y_{n−2} candidate present)
+
+## Historical results (pre head-cue mitigation)
+These earlier runs (items=60; seeds=7/13/23) predate block head balancing and aliasing. Kept here for context.
+
+### Easier settings (single-chain or two-level ladder)
+- Chain-only (f1..f{n−1} shown, no candidates): EM ≈ 1.000 at n=4 (trivial; answer can be read directly).
+- Two-level ladder (f{n−1}, f_n), single-chain facts: high EM even at larger n (e.g., n=5 → 0.920; n=8 → 0.950). Difficulty does not scale with n because head-equality cues suffice.
+
+### Hard setting (multi-chain + shuffled facts + three-level ladder)
+- Depth curve:
+  - n=4: 0.933 EM (56/60)
+  - n=5: 0.633 EM (38/60)
+  - n=6: 0.267 EM (16/60)
+- Sweep corroboration (different seed/reporting window):
+  - n=4: 0.883; n=5: 0.667; n=6: 0.233
+
 ## Error analysis highlights (hard setting)
 - Non-EM errors are largely composition mistakes across ladder levels (f_{n−2}→f_{n−1}→f_n), not candidate non-compliance.
 - Chain-only ordered control remains trivial (EM≈1); analyses should always use shuffled mode.
@@ -87,13 +111,11 @@ Lift-over-chance (qualitative):
   - Add plots (EM vs. n, EM vs. k) from `sweep.py` outputs.
 
 ## Reproduction notes
-- Data generation (example):
-  - `python generate_data.py --items 60 --hops 5 --k0 6 --k1 6 --k2 6 --context_chains 8 --M 512 --seed 7 --out data/synth_5_ladder3.jsonl`
-- Evaluation (example):
-  - `python evaluate.py --in data/synth_5_ladder3.jsonl --out runs/<ts>/results.jsonl --temp 0.0 --max_output_tokens 16`
-- Error analysis (example):
-  - `python analyze_errors.py --in runs/<ts>/results.jsonl --examples_per_type 3`
-- Parameter sweep (example):
-  - `python sweep.py --items 60 --hops 4,5,6 --k0s 6 --k1s 6 --k2s 6 --contexts 8 --seeds 7,13,23`
-
-All artifacts are saved under `runs/<timestamp>/` with `results.jsonl` and `summary.txt`; sweeps also produce a `summary.csv` aggregating EM.
+- Explicit (examples):
+  - Generate: `python explicit/generate.py --items 60 --hops 6 --k 6 --L 3 --context_chains 8 --M 256 --seed 7 --out data/explicit.jsonl [--block_head_balance --alias_heads_per_block --path_collision_stress]`
+  - Evaluate: `python explicit/evaluate.py --in data/explicit.jsonl --out runs/<ts>/explicit.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 [--order_trials 3]`
+  - Analyze: `python explicit/analyze_errors.py --in runs/<ts>/explicit.jsonl`
+- Implicit (examples):
+  - Generate: `python implicit/generate.py --items 60 --hops 6 --m 8 --M 256 --seed 7 --out data/implicit.jsonl [--ablate_inner --ablate_hop 3]`
+  - Evaluate: `python implicit/evaluate.py --in data/implicit.jsonl --out runs/<ts>/implicit.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 [--baseline pointer_f_n1 --order_trials 3]`
+- Sweeps: `python sweep.py --approach explicit|implicit ...` (artifacts written under `runs/sweep_<ts>/flat/` as `results_<tag>.jsonl`, `summary_<tag>.txt`, `gen_stdout_<tag>.txt`) and `summary.csv` at the sweep root.
