@@ -29,6 +29,15 @@ def extract_y_nm2(facts_chain: List[List[str]]) -> str:
     return facts_chain[-1][2]
 
 
+def extract_y_nm3(facts_chain: List[List[str]]) -> str:
+    if not facts_chain:
+        return ""
+    if len(facts_chain) < 2:
+        return facts_chain[0][0]
+    # The head of the last triple is y_{n-3}
+    return facts_chain[-1][0]
+
+
 def tails_of(cands: List[List[str]]) -> List[str]:
     return [t for _, _, t in cands]
 
@@ -61,6 +70,7 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     c1 = rec.get("candidates_fn_1") or []
     c2 = rec.get("candidates_fn") or []
     y_nm2 = extract_y_nm2(fc)
+    y_nm3 = extract_y_nm3(fc)
 
     final_tails = set(tails_of(c2))
     pred_in_final = pred in final_tails
@@ -79,6 +89,27 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     if cand_pred is not None:
         d_pred, _, _ = cand_pred
         pred_coherent = has_fn1_edge_from(y_nm2, c1, d_pred)
+
+    # Per-block correctness/coherence (pred) across ladder depth if available
+    # 1) f_n block: correct if pred == gold
+    pred_fn_correct = (pred == gold)
+    # 2) f_{n-1} block: coherent-from-chain if there exists [y_{n-2}, f_{n-1}, head_fn]
+    pred_fn1_from_chain = False
+    pred_fn1_head = None
+    if cand_pred is not None:
+        pred_fn1_head = cand_pred[0]  # y_{n-1} head used in f_n
+        for h, r, t in c1:
+            if h == y_nm2 and t == pred_fn1_head:
+                pred_fn1_from_chain = True
+                break
+    # 3) f_{n-2} block: coherent-from-chain if there exists [y_{n-3}, f_{n-2}, head_fn1]
+    pred_fn2_from_chain = False
+    c0 = rec.get("candidates_fn_2") or rec.get(f"candidates_f{n-2}") or []
+    if pred_fn1_from_chain and pred_fn1_head is not None and c0:
+        for h, r, t in c0:
+            if h == y_nm3 and t == y_nm2:
+                pred_fn2_from_chain = True
+                break
 
     # Exposure: overlaps between chain tokens and candidate heads
     chain_tokens = set([h for h, _, _ in fc] + [t for _, _, t in fc])
@@ -102,6 +133,9 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
         "gold_in_final": gold_in_final,
         "gold_coherent": gold_coherent,
         "pred_coherent": pred_coherent,
+        "pred_fn_correct": pred_fn_correct,
+        "pred_fn1_from_chain": pred_fn1_from_chain,
+        "pred_fn2_from_chain": pred_fn2_from_chain,
         "head_overlap_fn1": head_overlap_fn1,
         "head_overlap_fn": head_overlap_fn,
         "error_type": error_type,

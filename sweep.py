@@ -74,6 +74,7 @@ def main():
     ap.add_argument('--ablate_inner', action='store_true')
     ap.add_argument('--ablate_hop', type=int, default=2)
     ap.add_argument('--path_collision_stress', action='store_true')
+    ap.add_argument('--block_head_balance', action='store_true')
     args = ap.parse_args()
 
     hops_list = parse_list(args.hops)
@@ -135,6 +136,8 @@ def main():
             ]
             if args.path_collision_stress:
                 gen_cmd += ['--path_collision_stress']
+            if args.block_head_balance:
+                gen_cmd += ['--block_head_balance']
         else:
             gen_cmd = [
                 sys.executable, 'implicit/generate.py',

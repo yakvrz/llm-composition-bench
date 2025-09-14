@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to sleep between items")
     ap.add_argument("--chain_only_ordered", action="store_true", help="emit only the target chain facts in order (sanity check mode)")
     ap.add_argument("--path_collision_stress", action="store_true", help="ensure distractor candidates form coherent wrong paths across ladder blocks")
+    ap.add_argument("--block_head_balance", action="store_true", help="equalize head exposure per ladder block against prior printed content")
     args = ap.parse_args()
 
     layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
@@ -120,12 +121,12 @@ def main():
                 random.shuffle(facts_chain)
 
             # exposure from facts: token frequency counts across the shown facts
-            token_counts: Dict[str, int] = {}
+            token_counts_base: Dict[str, int] = {}
             for h_, r_, t_ in facts_chain:
-                token_counts[h_] = token_counts.get(h_, 0) + 1
-                token_counts[t_] = token_counts.get(t_, 0) + 1
+                token_counts_base[h_] = token_counts_base.get(h_, 0) + 1
+                token_counts_base[t_] = token_counts_base.get(t_, 0) + 1
 
-            def sample_candidates(heads: List[str], func_map: Dict[str, str], rel: str, correct_head: str, k: int) -> List[List[str]]:
+            def sample_candidates(heads: List[str], func_map: Dict[str, str], rel: str, correct_head: str, k: int, token_counts: Dict[str, int]) -> List[List[str]]:
                 candidates: List[List[str]] = []
                 used_heads: Set[str] = set()
                 used_tails: Set[str] = set()
@@ -134,42 +135,60 @@ def main():
                 used_heads.add(correct_head)
                 used_tails.add(correct_tail)
                 need = max(0, k - 1)
-                counts = [token_counts.get(h, 0) for h in heads]
-                if counts:
-                    sorted_counts = sorted(counts)
-                    median = sorted_counts[len(sorted_counts)//2]
+                if args.block_head_balance:
+                    # Greedy equalization by picking least-exposed heads first
+                    exposure_pairs = [(token_counts.get(h, 0), h) for h in heads if h != correct_head]
+                    random.shuffle(exposure_pairs)
+                    exposure_pairs.sort(key=lambda x: (x[0], x[1]))
+                    idx = 0
+                    while len(candidates) < k and idx < len(exposure_pairs):
+                        h = exposure_pairs[idx][1]
+                        idx += 1
+                        t = func_map[h]
+                        if h in used_heads or t in used_tails:
+                            continue
+                        candidates.append([h, rel, t])
+                        used_heads.add(h)
+                        used_tails.add(t)
+                        # update local counts to keep selection balanced
+                        token_counts[h] = token_counts.get(h, 0) + 1
                 else:
-                    median = 0
-                low_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) <= median]
-                high_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) > median]
-                random.shuffle(low_pool)
-                random.shuffle(high_pool)
-                target_low = need // 2
-                target_high = need - target_low
-                toggle = True
-                while len(candidates) < k and (low_pool or high_pool):
-                    choose_low = (toggle and target_low > 0 and low_pool) or not high_pool
-                    choose_high = (not toggle and target_high > 0 and high_pool) or not low_pool
-                    if choose_low and low_pool:
-                        h = low_pool.pop()
-                    elif choose_high and high_pool:
-                        h = high_pool.pop()
+                    counts = [token_counts.get(h, 0) for h in heads]
+                    if counts:
+                        sorted_counts = sorted(counts)
+                        median = sorted_counts[len(sorted_counts)//2]
                     else:
-                        pool = low_pool if low_pool else high_pool
-                        if not pool:
-                            break
-                        h = pool.pop()
-                    t = func_map[h]
-                    if h in used_heads or t in used_tails:
-                        continue
-                    candidates.append([h, rel, t])
-                    used_heads.add(h)
-                    used_tails.add(t)
-                    if token_counts.get(h, 0) <= median and target_low > 0:
-                        target_low -= 1
-                    elif token_counts.get(h, 0) > median and target_high > 0:
-                        target_high -= 1
-                    toggle = not toggle
+                        median = 0
+                    low_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) <= median]
+                    high_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) > median]
+                    random.shuffle(low_pool)
+                    random.shuffle(high_pool)
+                    target_low = need // 2
+                    target_high = need - target_low
+                    toggle = True
+                    while len(candidates) < k and (low_pool or high_pool):
+                        choose_low = (toggle and target_low > 0 and low_pool) or not high_pool
+                        choose_high = (not toggle and target_high > 0 and high_pool) or not low_pool
+                        if choose_low and low_pool:
+                            h = low_pool.pop()
+                        elif choose_high and high_pool:
+                            h = high_pool.pop()
+                        else:
+                            pool = low_pool if low_pool else high_pool
+                            if not pool:
+                                break
+                            h = pool.pop()
+                        t = func_map[h]
+                        if h in used_heads or t in used_tails:
+                            continue
+                        candidates.append([h, rel, t])
+                        used_heads.add(h)
+                        used_tails.add(t)
+                        if token_counts.get(h, 0) <= median and target_low > 0:
+                            target_low -= 1
+                        elif token_counts.get(h, 0) > median and target_high > 0:
+                            target_high -= 1
+                        toggle = not toggle
                 return candidates
             
             # Determine k per level
@@ -186,6 +205,8 @@ def main():
 
             # Build dynamic candidate blocks for functions i in [n-L+1..n]
             candidates_blocks: Dict[str, List[List[str]]] = {}
+            # token counts that include prior printed content (start from facts)
+            token_counts_for_blocks: Dict[str, int] = dict(token_counts_base)
             for i_func in range(args.hops - L_eff + 1, args.hops + 1):
                 rel = f"f{i_func}"
                 heads_layer = layers[i_func - 1]
@@ -194,9 +215,14 @@ def main():
                     correct_head = x
                 else:
                     correct_head = inters[i_func - 2]
-                block = sample_candidates(heads_layer, func_map, rel, correct_head, k_for(i_func))
+                block = sample_candidates(heads_layer, func_map, rel, correct_head, k_for(i_func), token_counts_for_blocks)
                 random.shuffle(block)
                 candidates_blocks[f"candidates_f{i_func}"] = block
+                # update exposure counts with tokens from this printed block (heads and tails)
+                if args.block_head_balance:
+                    for h, _, t in block:
+                        token_counts_for_blocks[h] = token_counts_for_blocks.get(h, 0) + 1
+                        token_counts_for_blocks[t] = token_counts_for_blocks.get(t, 0) + 1
 
             # Path-collision stress: ensure for each non-gold head at f_{n-1}, there is a corresponding f_n triple
             if args.path_collision_stress:
@@ -206,10 +232,10 @@ def main():
                     heads_fn = {h for h, _, _ in candidates_blocks[fn_key]}
                     augmented = False
                     for h, r, t in list(candidates_blocks[fn1_key]):
-                        if h not in heads_fn:
-                            # add corresponding f_n mapping for this head
-                            candidates_blocks[fn_key].append([h, f"f{args.hops}", functions[args.hops - 1][h]])
-                            heads_fn.add(h)
+                        # For f_n, the head must be y_{n-1} which is the tail 't' of f_{n-1}
+                        if t not in heads_fn:
+                            candidates_blocks[fn_key].append([t, f"f{args.hops}", functions[args.hops - 1][t]])
+                            heads_fn.add(t)
                             augmented = True
                     if augmented:
                         random.shuffle(candidates_blocks[fn_key])
