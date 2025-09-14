@@ -1,11 +1,11 @@
-# n-hop Composition Benchmark (Symbolic, Open-book, laddered candidates)
+# n-hop Composition Benchmark (Symbolic, Open-book, Multi-chain Context)
 
-**Goal:** measure pure compositional reasoning over n-hop chains in open-book settings. The prompt shows the early chain facts (f1..f{n−2}) and provides candidate sets for both f{n−1} and f{n}; the model must select the correct final token after composing.
+**Goal:** measure pure compositional reasoning over n-hop chains in open-book settings. The prompt provides multi-chain context facts mixed from the target chain plus distractors, with laddered candidate sets for f_{n-2}, f_{n-1}, and f_n; the model must compose through the chain to select the correct final answer.
 
-## What’s included
+## What's included
 
-- `generate_data.py` — symbolic generator for n-hop chains over typed layers (L0..Ln) with bijective maps f1..fn; emits chain facts (f1..f{n-2}) and candidate sets for f{n-1} and f{n}.
-- `evaluate.py` — open-book evaluator using the Responses API; builds a laddered prompt (chain + two/three candidate blocks) and reports Exact Match (EM) overall and by hop count (n).
+- `generate_data.py` — symbolic generator for n-hop chains over typed layers (L0..Ln) with bijective maps f1..fn; emits mixed chain facts from target + K distractor chains, plus laddered candidate sets with exposure balancing.
+- `evaluate.py` — open-book evaluator using the Responses API; builds multi-chain prompt with laddered candidates and reports Exact Match (EM) overall and by hop count (n).
 - `analyze_errors.py` — offline error analysis (compliance, structural coherence, error taxonomy, examples).
 - `sweep.py` — parameter sweep utility for n, candidate sizes, contexts, and seeds; writes CSV summaries.
 
@@ -19,23 +19,33 @@ Each line is one item:
   "n": 4,
   "facts_chain": [
     ["A_0047","f1","B_0132"],
-    ["B_0132","f2","C_0220"]
+    ["B_0132","f2","C_0220"],
+    ["D_0555","f1","E_0234"],
+    ["C_0420","f2","D_0199"],
+    ["A_0234","f1","B_0789"],
+    ["E_0234","f2","F_0456"]
   ],
-  "candidates_fn_1": [
-    ["C_0220","f3","D_0901"],  // correct f3
+  "candidates_fn_2": [
+    ["C_0220","f3","D_0901"],  // correct f3 (target chain)
     ["C_0420","f3","D_0199"],
     ["C_1111","f3","D_0555"],
     ["C_0002","f3","D_0303"]
   ],
-  "candidates_fn": [
-    ["D_0901","f4","E_0073"],  // correct f4
+  "candidates_fn_1": [
+    ["D_0901","f4","E_0073"],  // correct f4 (target chain)
     ["D_0420","f4","E_0199"],
     ["D_1111","f4","E_0555"],
     ["D_0002","f4","E_0303"]
   ],
-  "question": "What is f4 of f3 of f2 of f1 of A_0047?",
-  "answer_id": "E_0073",
-  "answer_aliases": ["E_0073"]
+  "candidates_fn": [
+    ["E_0073","f5","F_0824"],  // correct f5 (target chain)
+    ["E_0420","f5","F_0199"],
+    ["E_1111","f5","F_0555"],
+    ["E_0002","f5","F_0303"]
+  ],
+  "question": "What is f5 of f4 of f3 of f2 of f1 of A_0047?",
+  "answer_id": "F_0824",
+  "answer_aliases": ["F_0824"]
 }
 ```
 
@@ -43,8 +53,10 @@ Each line is one item:
 
 - `--items`: number of instances
 - `--hops`: hop count n (default 4)
+- `--k0`: number of candidates for f_{n-2}
 - `--k1`: number of candidates for f_{n-1}
 - `--k2`: number of candidates for f_n
+- `--context_chains`: number of distractor chains to mix in (default 6)
 - `--M`: layer size (tokens per layer; default 512)
 - `--seed`: RNG seed
 
@@ -57,8 +69,8 @@ OPENAI_API_KEY=sk-...
 
 Generate and evaluate:
 ```bash
-# 1) Generate symbolic data (laddered)
-python generate_data.py --items 200 --hops 4 --k1 4 --k2 4 --M 512 --seed 123 --out data/synth.jsonl
+# 1) Generate symbolic data (multi-chain context with laddered candidates)
+python generate_data.py --items 200 --hops 4 --k0 4 --k1 4 --k2 4 --context_chains 6 --M 512 --seed 123 --out data/synth.jsonl
 
 # 2) Open-book evaluation (EM; saves per-item outputs)
 TS=$(date +%Y%m%d_%H%M%S)
@@ -74,12 +86,14 @@ python sweep.py --items 60 --hops 4,5,6 --k0s 6 --k1s 6 --k2s 6 --contexts 8 --s
 
 ## Evaluation details
 
-- **Prompt:** early chain facts (f1..f{n-2}) + candidate sets for f{n-1} and f{n}; answer with the final token.
+- **Prompt:** mixed chain facts from target + distractor chains + laddered candidate sets for f_{n-2}, f_{n-1}, and f_n; answer with the final token.
 - **Metric:** Exact Match (EM) against `answer_aliases` (case/spacing-robust normalization).
-- **Output:** console summary + `results.jsonl` with: `id, n, question, facts_chain, candidates_fn_1, candidates_fn, gold, pred, em, error`.
+- **Output:** console summary + `results.jsonl` with: `id, n, question, facts_chain, candidates_fn_2, candidates_fn_1, candidates_fn, gold, pred, em, error`.
 
 ## Design choices
 
 - Bijective maps per hop ensure a unique answer and constant difficulty.
-- Controllable difficulty via `n` (chain length) and `k` (candidate count).
+- Multi-chain context creates realistic distraction without changing the core reasoning task.
+- Laddered candidates (f_{n-2}, f_{n-1}, f_n) with exposure balancing ensure fair evaluation.
+- Controllable difficulty via `n` (chain length), `k` (candidate count), and `context_chains` (distraction level).
 - Symbolic tokens avoid NL artifacts; naturalized surfaces can be layered later if needed.
