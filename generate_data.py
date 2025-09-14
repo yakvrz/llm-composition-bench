@@ -15,7 +15,7 @@ Usage:
 """
 
 import argparse, json, random, time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 
 def layer_prefix(i: int) -> str:
@@ -74,6 +74,7 @@ def main():
     ap.add_argument("--out", type=str, default="data/synth.jsonl", help="output JSONL path")
     ap.add_argument("--seed", type=int, default=7, help="random seed")
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to sleep between items")
+    ap.add_argument("--chain_only_ordered", action="store_true", help="emit only the target chain facts in order (sanity check mode)")
     args = ap.parse_args()
 
     layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
@@ -104,97 +105,119 @@ def main():
                 return triples
 
             # Target chain facts
-            facts_chain.extend(chain_facts_from_start(x))
-            # Context distractor chains
-            idx_pool = list(range(len(L0)))
-            random.shuffle(idx_pool)
-            added = 0
-            for j in idx_pool:
-                if j == i:
-                    continue
-                facts_chain.extend(chain_facts_from_start(L0[j]))
-                added += 1
-                if added >= max(0, args.context_chains):
-                    break
-            # Shuffle facts to hide order
-            random.shuffle(facts_chain)
+            target_facts = chain_facts_from_start(x)
+            facts_chain.extend(target_facts)
 
-            # Laddered candidates: f_{n-2}, f_{n-1}, f_n
-            y_nm2 = inters[-2] if args.hops >= 2 else prev
+            # Multi-chain hygiene: avoid node reuse across chains within the same item
+            # except via the true path nodes.
+            def tokens_in_triples(triples: List[List[str]]) -> Set[str]:
+                s: Set[str] = set()
+                for h_, r_, t_ in triples:
+                    s.add(h_); s.add(t_)
+                return s
+
+            used_nodes: Set[str] = tokens_in_triples(target_facts)
+
+            # Context distractor chains (only if not chain-only control)
+            if not args.chain_only_ordered:
+                idx_pool = list(range(len(L0)))
+                random.shuffle(idx_pool)
+                added = 0
+                for j in idx_pool:
+                    if j == i:
+                        continue
+                    cand_triples = chain_facts_from_start(L0[j])
+                    cand_tokens = tokens_in_triples(cand_triples)
+                    # Enforce disjointness from already used nodes
+                    if used_nodes.isdisjoint(cand_tokens):
+                        facts_chain.extend(cand_triples)
+                        used_nodes.update(cand_tokens)
+                        added += 1
+                        if added >= max(0, args.context_chains):
+                            break
+
+            # Shuffle facts to hide order (unless chain-only ordered control)
+            if not args.chain_only_ordered:
+                random.shuffle(facts_chain)
+
+            # Laddered candidate blocks built independently with balanced exposure and unique tails
+            # Correct intermediates
             y_nm1 = inters[-1]
-            y_nm3 = inters[-3] if args.hops >= 3 else prev
+            y_nm2 = inters[-2] if args.hops >= 2 else None
+            y_nm3 = inters[-3] if args.hops >= 3 else None
 
-            # exposure set from facts
-            facts_tokens = set()
+            # exposure from facts: token frequency counts across the shown facts
+            token_counts: Dict[str, int] = {}
             for h_, r_, t_ in facts_chain:
-                facts_tokens.add(h_); facts_tokens.add(t_)
+                token_counts[h_] = token_counts.get(h_, 0) + 1
+                token_counts[t_] = token_counts.get(t_, 0) + 1
 
-            # f_{n-2} candidates (heads in L_{n-3})
+            def sample_candidates(heads: List[str], func_map: Dict[str, str], rel: str, correct_head: str, k: int) -> List[List[str]]:
+                candidates: List[List[str]] = []
+                used_heads: Set[str] = set()
+                used_tails: Set[str] = set()
+                # correct first
+                correct_tail = func_map[correct_head]
+                candidates.append([correct_head, rel, correct_tail])
+                used_heads.add(correct_head)
+                used_tails.add(correct_tail)
+                need = max(0, k - 1)
+                # Split by frequency median to avoid frequency tells
+                # Compute counts for provided heads (0 if absent)
+                counts = [token_counts.get(h, 0) for h in heads]
+                if counts:
+                    sorted_counts = sorted(counts)
+                    median = sorted_counts[len(sorted_counts)//2]
+                else:
+                    median = 0
+                low_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) <= median]
+                high_pool = [h for h in heads if h != correct_head and token_counts.get(h, 0) > median]
+                random.shuffle(low_pool)
+                random.shuffle(high_pool)
+                target_low = need // 2
+                target_high = need - target_low
+                toggle = True
+                while len(candidates) < k and (low_pool or high_pool):
+                    choose_low = (toggle and target_low > 0 and low_pool) or not high_pool
+                    choose_high = (not toggle and target_high > 0 and high_pool) or not low_pool
+                    if choose_low and low_pool:
+                        h = low_pool.pop()
+                    elif choose_high and high_pool:
+                        h = high_pool.pop()
+                    else:
+                        pool = low_pool if low_pool else high_pool
+                        if not pool:
+                            break
+                        h = pool.pop()
+                    t = func_map[h]
+                    if h in used_heads or t in used_tails:
+                        continue
+                    candidates.append([h, rel, t])
+                    used_heads.add(h)
+                    used_tails.add(t)
+                    if token_counts.get(h, 0) <= median and target_low > 0:
+                        target_low -= 1
+                    elif token_counts.get(h, 0) > median and target_high > 0:
+                        target_high -= 1
+                    toggle = not toggle
+                return candidates
+
+            # f_{n-2}
             cand_fn2: List[List[str]] = []
-            if args.hops >= 3:
-                cand_fn2.append([y_nm3, f"f{args.hops-2}", y_nm2])
-                idx_correct_nm3 = L_nm3.index(y_nm3)
-                pool_nm3 = [j for j in range(len(L_nm3)) if j != idx_correct_nm3]
-                random.shuffle(pool_nm3)
-                # prefer heads that appear in facts
-                preferred = [L_nm3[j] for j in pool_nm3 if L_nm3[j] in facts_tokens]
-                others = [L_nm3[j] for j in pool_nm3 if L_nm3[j] not in facts_tokens]
-                need = max(0, args.k0 - 1)
-                for z in preferred[: min(len(preferred), (need + 1) // 2)]:
-                    cand_fn2.append([z, f"f{args.hops-2}", f_nm2[z]])
-                while len(cand_fn2) < 1 + need and others:
-                    z = others.pop()
-                    cand_fn2.append([z, f"f{args.hops-2}", f_nm2[z]])
+            if args.hops >= 3 and y_nm3 is not None and y_nm2 is not None:
+                cand_fn2 = sample_candidates(L_nm3, f_nm2, f"f{args.hops-2}", y_nm3, args.k0)
 
-            # f_{n-1} candidates (heads in L_{n-2})
+            # f_{n-1}
             cand_fn1: List[List[str]] = []
-            cand_fn1.append([y_nm2, f"f{args.hops-1}", y_nm1])
-            idx_correct_nm2 = L_nm2.index(y_nm2)
-            pool_nm2 = [j for j in range(len(L_nm2)) if j != idx_correct_nm2]
-            random.shuffle(pool_nm2)
-            # use tails from fn-2 candidates where possible
-            tails_fn2 = {t for _, _, t in cand_fn2} if args.hops >= 3 else set()
-            extra_heads1 = [h for h in tails_fn2 if h != y_nm2]
-            random.shuffle(extra_heads1)
-            used1 = {y_nm2}
-            for h in extra_heads1:
-                cand_fn1.append([h, f"f{args.hops-1}", f_nm1[h]])
-                used1.add(h)
-                if len(cand_fn1) >= args.k1:
-                    break
-            for j in pool_nm2:
-                if len(cand_fn1) >= args.k1:
-                    break
-                z = L_nm2[j]
-                if z in used1:
-                    continue
-                cand_fn1.append([z, f"f{args.hops-1}", f_nm1[z]])
-                used1.add(z)
+            if y_nm2 is not None:
+                cand_fn1 = sample_candidates(L_nm2, f_nm1, f"f{args.hops-1}", y_nm2, args.k1)
 
-            # f_n candidates (heads in L_{n-1}); ensure overlap with tails of f_{n-1}
-            cand_fn: List[List[str]] = []
-            cand_fn.append([y_nm1, f"f{args.hops}", a])
-            tails_fn1 = {t for _, _, t in cand_fn1}
-            extra_heads = [h for h in tails_fn1 if h != y_nm1]
-            random.shuffle(extra_heads)
-            used_final = {y_nm1}
-            for h in extra_heads:
-                cand_fn.append([h, f"f{args.hops}", f_n[h]])
-                used_final.add(h)
-                if len(cand_fn) >= min(args.k2, max(2, args.k2)):
-                    break
-            pool_nm1 = list(range(len(L_nm1)))
-            random.shuffle(pool_nm1)
-            for j in pool_nm1:
-                if len(cand_fn) >= args.k2:
-                    break
-                h = L_nm1[j]
-                if h in used_final:
-                    continue
-                cand_fn.append([h, f"f{args.hops}", f_n[h]])
-                used_final.add(h)
+            # f_n
+            cand_fn: List[List[str]] = sample_candidates(L_nm1, f_n, f"f{args.hops}", y_nm1, args.k2)
 
-            random.shuffle(cand_fn2)
+            # Independent shuffle per ladder block
+            if cand_fn2:
+                random.shuffle(cand_fn2)
             random.shuffle(cand_fn1)
             random.shuffle(cand_fn)
             q = _question_laddered(args.hops, x)

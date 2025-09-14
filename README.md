@@ -59,6 +59,7 @@ Each line is one item:
 - `--context_chains`: number of distractor chains to mix in (default 6)
 - `--M`: layer size (tokens per layer; default 512)
 - `--seed`: RNG seed
+ - `--chain_only_ordered`: emit only the true chain facts in order (sanity check; expect EM≈1). Analyses should always shuffle.
 
 ## Quickstart
 
