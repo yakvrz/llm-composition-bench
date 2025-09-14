@@ -64,6 +64,8 @@ def main():
     ap.add_argument("--chain_only_ordered", action="store_true", help="emit only the target chain facts in order (sanity check mode)")
     ap.add_argument("--path_collision_stress", action="store_true", help="ensure distractor candidates form coherent wrong paths across ladder blocks")
     ap.add_argument("--block_head_balance", action="store_true", help="equalize head exposure per ladder block against prior printed content")
+    ap.add_argument("--alias_heads_per_block", action="store_true", help="render candidate heads with block-local aliases and print alias map")
+    ap.add_argument("--alias_token_prefix", type=str, default="H", help="prefix for block-local aliases (default: H)")
     args = ap.parse_args()
 
     layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
@@ -217,7 +219,21 @@ def main():
                     correct_head = inters[i_func - 2]
                 block = sample_candidates(heads_layer, func_map, rel, correct_head, k_for(i_func), token_counts_for_blocks)
                 random.shuffle(block)
-                candidates_blocks[f"candidates_f{i_func}"] = block
+                # Optional aliasing: replace heads with H_i and emit alias map lines
+                if args.alias_heads_per_block:
+                    alias_prefix = args.alias_token_prefix or "H"
+                    aliases = {}
+                    alias_lines = []
+                    for idx_b, (h, rr, t) in enumerate(block, start=1):
+                        alias = f"{alias_prefix}{idx_b}"
+                        aliases[h] = alias
+                        alias_lines.append([alias, "=", h])
+                    aliased_block = [[aliases[h], rel, t] for (h, _, t) in block]
+                    # Store both alias map and aliased candidates for rendering
+                    candidates_blocks[f"alias_map_f{i_func}"] = alias_lines
+                    candidates_blocks[f"candidates_f{i_func}"] = aliased_block
+                else:
+                    candidates_blocks[f"candidates_f{i_func}"] = block
                 # update exposure counts with tokens from this printed block (heads and tails)
                 if args.block_head_balance:
                     for h, _, t in block:

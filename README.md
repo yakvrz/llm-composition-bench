@@ -141,6 +141,8 @@ Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/ind
 - Pointer baseline (implicit): `--baseline pointer_f_n1` outputs the tail of the first f_{n−1} line; expected ≈1/m.
 - Ablation (implicit): generator flags `--ablate_inner --ablate_hop j` remove one inner hop across all chains to induce ambiguity; EM should approach ≈1/m.
 - Path-collision stress (explicit): generator flag `--path_collision_stress` ensures coherent distractor paths across ladder levels in candidate blocks.
+- Head-cue mitigation (explicit): `--block_head_balance` equalizes head exposure per ladder block (against prior printed content), and `--alias_heads_per_block` prints a block-local alias map to neutralize identity cues.
+- Lift-over-chance plots: plotting adds lift overlays for both approaches.
 
 ## Evaluation details
 

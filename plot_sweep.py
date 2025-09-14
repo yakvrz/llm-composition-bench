@@ -84,6 +84,26 @@ def plot_implicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'lines_acc_vs_m_by_n.png'))
     plt.close()
 
+    # Lift-over-chance overlay (implicit): lift = (EM - 1/m) / (1 - 1/m)
+    plt.figure(figsize=(10, 5))
+    for n in ns:
+        ys = []
+        for m in ms:
+            vals = by_nm.get((n, m), [])
+            em = (sum(vals) / len(vals)) if vals else float('nan')
+            chance = 0.0 if m <= 1 else 1.0 / m
+            lift = (em - chance) / (1.0 - chance) if em == em and (1.0 - chance) > 0 else float('nan')
+            ys.append(lift)
+        plt.plot(ms, ys, marker='o', label=f'n={n}')
+    plt.xlabel('m (chains)')
+    plt.ylabel('Lift over chance')
+    plt.ylim(0, 1)
+    plt.title('Implicit: Lift-over-chance vs m by n')
+    plt.legend(ncol=min(3, len(ns)))
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, 'lines_lift_vs_m_by_n.png'))
+    plt.close()
+
 
 def plot_explicit(rows, outdir: str):
     # Aggregate by (n,L) across seeds, using unified k or k0/k1/k2 if desired
@@ -147,6 +167,41 @@ def plot_explicit(rows, outdir: str):
         plt.legend(ncol=min(3, len(by_L_then_n)))
         plt.tight_layout()
         plt.savefig(os.path.join(outdir, 'lines_explicit_acc_vs_n_by_L.png'))
+        plt.close()
+
+    # Lift-over-chance overlay (explicit): lift = (EM - 1/k_last) / (1 - 1/k_last)
+    by_L_then_n_lift = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        if r.get('approach') == 'implicit':
+            continue
+        try:
+            n = int(r['n']); L = int(r.get('L') or 0); acc = float(r['acc'])
+            k_last = None
+            if r.get('k'):
+                k_last = int(r['k'])
+            else:
+                ks = [int(r[x]) for x in ('k0','k1','k2') if r.get(x)]
+                k_last = ks[-1] if ks else None
+            if not k_last or k_last <= 1:
+                continue
+            chance = 1.0 / k_last
+            lift = (acc - chance) / (1.0 - chance)
+            by_L_then_n_lift[L][n].append(lift)
+        except Exception:
+            pass
+    if by_L_then_n_lift:
+        plt.figure(figsize=(10, 5))
+        for L in sorted(by_L_then_n_lift.keys()):
+            xs = sorted(by_L_then_n_lift[L].keys())
+            ys = [sum(by_L_then_n_lift[L][n]) / len(by_L_then_n_lift[L][n]) for n in xs]
+            plt.plot(xs, ys, marker='o', label=f'L={L}')
+        plt.xlabel('n (hops)')
+        plt.ylabel('Lift over chance')
+        plt.ylim(0, 1)
+        plt.title('Explicit: Lift-over-chance vs n by L')
+        plt.legend(ncol=min(3, len(by_L_then_n_lift)))
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, 'lines_explicit_lift_vs_n_by_L.png'))
         plt.close()
 
     # (Omitted) Redundant line plot (EM vs L by n)

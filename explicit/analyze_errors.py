@@ -158,6 +158,11 @@ def summarize(analyses: List[Dict[str, Any]]):
     compliant = sum(1 for a in analyses if (a["em"] or a["pred_in_final"]))
     coherent = sum(1 for a in analyses if (a["em"] or a["pred_coherent"]))
 
+    # Aggregate per-block correctness/coherence
+    fn_correct = sum(1 for a in analyses if a.get("pred_fn_correct"))
+    fn1_chain = sum(1 for a in analyses if a.get("pred_fn1_from_chain"))
+    fn2_chain = sum(1 for a in analyses if a.get("pred_fn2_from_chain"))
+
     return {
         "total": total,
         "acc": rate(acc),
@@ -165,6 +170,9 @@ def summarize(analyses: List[Dict[str, Any]]):
         "non_em_by_type": err_types,
         "pred_in_final_rate": rate(compliant),
         "pred_coherent_rate": rate(coherent),
+        "pred_fn_correct_rate": rate(fn_correct),
+        "pred_fn1_from_chain_rate": rate(fn1_chain),
+        "pred_fn2_from_chain_rate": rate(fn2_chain),
     }
 
 
@@ -188,6 +196,10 @@ def main():
         print(f"  {t or '—'}: {c}")
     print(f"\nPred in final candidates: {summary['pred_in_final_rate']:.3f}")
     print(f"Pred structurally coherent: {summary['pred_coherent_rate']:.3f}")
+    # Per-block correctness/coherence rates
+    print(f"f_n correct (pred==gold): {summary['pred_fn_correct_rate']:.3f}")
+    print(f"f_{{n-1}} coherent-from-chain: {summary['pred_fn1_from_chain_rate']:.3f}")
+    print(f"f_{{n-2}} from-chain: {summary['pred_fn2_from_chain_rate']:.3f}")
 
     if args.examples_per_type > 0:
         print("\n=== Examples (per error type) ===")
