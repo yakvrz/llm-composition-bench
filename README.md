@@ -133,7 +133,7 @@ python exp.py plot --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach i
 python exp.py report --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit
 ```
 
-Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/index.csv`.
+Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/index.csv` (ignored by git).
 
 ## Diagnostics and baselines
 
@@ -143,6 +143,20 @@ Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/ind
 - Path-collision stress (explicit): generator flag `--path_collision_stress` ensures coherent distractor paths across ladder levels in candidate blocks.
 - Head-cue mitigation (explicit): `--block_head_balance` equalizes head exposure per ladder block (against prior printed content), and `--alias_heads_per_block` prints a block-local alias map to neutralize identity cues.
 - Lift-over-chance plots: plotting adds lift overlays for both approaches.
+
+## Current snapshot
+
+Compact runs (gpt-4.1-mini, temp=0.0, M=256; items=24; seed=7):
+- Implicit (bag-of-facts):
+  - n=4: m=6 → 0.833; m=8 → 0.792
+  - n=6: m=6 → 0.167; m=8 → 0.083
+  - n=8: m=6 → 0.208; m=8 → 0.167
+- Explicit (laddered, with `--block_head_balance --alias_heads_per_block --path_collision_stress`):
+  - n=4: L=2 → 0.667; L=3 → 0.708
+  - n=6: L=2 → 0.208; L=3 → 0.208
+  - n=8: L=2 → 0.250; L=3 → 0.417
+
+See plots under `plots/implicit/sweep_20250915_023900/` and `plots/explicit/sweep_20250915_024440/`.
 
 ## Evaluation details
 

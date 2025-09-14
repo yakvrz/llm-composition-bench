@@ -49,9 +49,21 @@ Sweep artifacts saved under `runs/sweep_YYYYMMDD_HHMMSS/summary.csv` (e.g., `run
 - Collapsed means: by n → 4:0.745, 5:0.344, 6:0.193, 7:0.156, 8:0.115; by m → 4:0.475, 8:0.296, 12:0.279, 16:0.192.
 - Takeaway: accuracy drops sharply with n and with larger m, confirming the multi-chain entanglement pressure in the implicit setup.
 
-Recent small runs (via exp.py):
-- Implicit small (n∈{4,5,6}, m∈{4,8,12}, seeds={7,13}): see `plots/implicit/sweep_YYYYMMDD*/`.
-- Explicit small (n∈{4,6,8}, L∈{2,3}, seed={7}): see `plots/explicit/sweep_YYYYMMDD*/`.
+Latest compact snapshots (model=gpt-4.1-mini, temp=0.0, M=256):
+- Implicit (n∈{4,6,8}, m∈{6,8}, items=24, seed=7):
+  - n=4: m=6 → 0.833; m=8 → 0.792
+  - n=6: m=6 → 0.167; m=8 → 0.083
+  - n=8: m=6 → 0.208; m=8 → 0.167
+  Plots: `plots/implicit/sweep_20250915_023900/`
+- Explicit (alias+balance+path-collision; n∈{4,6,8}, L∈{2,3}, items=24, seed=7):
+  - n=4: L=2 → 0.667; L=3 → 0.708
+  - n=6: L=2 → 0.208; L=3 → 0.208
+  - n=8: L=2 → 0.250; L=3 → 0.417
+  Plots: `plots/explicit/sweep_20250915_024440/`
+
+Lift-over-chance (qualitative):
+- Implicit lift decreases with n and m; near-chance behavior at higher n/m.
+- Explicit lift drops after head-cue mitigation; L=3 no longer clearly exceeds L=2.
 
 ## Error analysis highlights (hard setting)
 - Non-EM errors are largely composition mistakes across ladder levels (f_{n−2}→f_{n−1}→f_n), not candidate non-compliance.
