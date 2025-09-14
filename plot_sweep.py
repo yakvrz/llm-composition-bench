@@ -124,6 +124,33 @@ def plot_explicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'heatmap_explicit_acc_n_by_L.png'))
     plt.close()
 
+    # Line plot: EM vs n for each fixed L
+    by_L_then_n = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        if r.get('approach') == 'implicit':
+            continue
+        try:
+            n = int(r['n']); L = int(r.get('L') or 0); acc = float(r['acc'])
+        except Exception:
+            continue
+        by_L_then_n[L][n].append(acc)
+    if by_L_then_n:
+        plt.figure(figsize=(10, 5))
+        for L in sorted(by_L_then_n.keys()):
+            xs = sorted(by_L_then_n[L].keys())
+            ys = [sum(by_L_then_n[L][n]) / len(by_L_then_n[L][n]) for n in xs]
+            plt.plot(xs, ys, marker='o', label=f'L={L}')
+        plt.xlabel('n (hops)')
+        plt.ylabel('EM')
+        plt.ylim(0, 1)
+        plt.title('Explicit: EM vs n by L (mean across seeds)')
+        plt.legend(ncol=min(3, len(by_L_then_n)))
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, 'lines_explicit_acc_vs_n_by_L.png'))
+        plt.close()
+
+    # (Omitted) Redundant line plot (EM vs L by n)
+
 
 def main():
     ap = argparse.ArgumentParser()
