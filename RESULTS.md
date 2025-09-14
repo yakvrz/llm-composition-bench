@@ -17,19 +17,21 @@ This document summarizes the results and insights from the current benchmark, wh
 - Two-level ladder (f{n−1}, f_n), single-chain facts: high EM even at larger n (e.g., n=5 → 0.920; n=8 → 0.950). Difficulty does not scale with n because head-equality cues suffice.
 
 ### B. Hard setting (multi-chain + shuffled facts + three-level ladder)
-- Parameters unless stated: items=60, k0=k1=k2=6, context_chains=8, temp=0.0.
-- Depth curve:
-  - n=4: 0.933 EM (56/60)
-  - n=5: 0.633 EM (38/60)
-  - n=6: 0.267 EM (16/60)
-- Sweep (same parameters, different seed/reporting window) corroborates the trend:
-  - n=4: 0.883; n=5: 0.667; n=6: 0.233
+- Parameters (latest sweep 2025-09-14): items=24, k0=k1=k2=6, context_chains=8, M=256, seeds∈{7,13,23}, model=gpt-4.1-mini, temp=0.0.
+- Per-seed EM (n=4..6):
+  - n=4: 0.958, 0.958, 1.000 (mean±sd ≈ 0.972±0.020)
+  - n=5: 0.917, 0.792, 0.708 (mean±sd ≈ 0.806±0.086)
+  - n=6: 0.833, 0.792, 0.708 (mean±sd ≈ 0.778±0.052)
+- Notes:
+  - There is a clear drop from n=4 → n=5; n=5 → n=6 is relatively flat on this sample size.
+  - Seed variance is noticeable at higher n (spread ≈8–21 EM points at n=5).
+  - Independent shuffling, balanced head exposure, unique tails, and multi-chain hygiene prevent simple frequency/order tells.
 
-These runs demonstrate a clean depth-sensitivity signal once the task removes order cues, mixes multiple chains, and requires consistent selection across multiple candidate layers.
+Sweep artifacts saved under `runs/sweep_YYYYMMDD_HHMMSS/summary.csv` (e.g., `runs/sweep_20250914_201030/summary.csv`).
 
-## Error analysis highlights (representative two-level run at n=5)
-- EM: 0.920 on 100 items (two-level, single-chain). All predictions belonged to final candidates (1.000 compliance).
-- Non-EM errors predominantly “incoherent_path”: picked an f_n mapping whose head was not reachable from y_{n−2} via any f_{n−1} candidate. This indicates failures are about composing across candidate blocks, not ignoring instructions.
+## Error analysis highlights (hard setting)
+- Non-EM errors are largely composition mistakes across ladder levels (f_{n−2}→f_{n−1}→f_n), not candidate non-compliance.
+- Chain-only ordered control remains trivial (EM≈1); analyses should always use shuffled mode.
 
 ## Takeaways
 - Depth matters only when composition is required. Without shuffled multi-chain facts and a deeper ladder, models can exploit head equality and order, keeping EM high across n.
