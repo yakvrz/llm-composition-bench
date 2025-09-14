@@ -1,0 +1,13 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+
+# OS
+.DS_Store
+
+# Env
+.env
+
+# Data & outputs
+data/
+runs/
