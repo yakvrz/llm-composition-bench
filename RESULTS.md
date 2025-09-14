@@ -3,12 +3,15 @@
 This document summarizes the results and insights from the current benchmark, which measures multi-step composition over symbolic n-hop chains using an open-book prompt with laddered candidate sets.
 
 ## Setup summary
+- Model (unless stated): gpt-4.1-mini, temp=0.0.
 - Data: synthetic layers L0..Ln with bijective maps f1..fn (random permutations).
-- Prompt (laddered):
+- Explicit prompt (laddered):
   - Facts: shuffled chain triples for f1..f{n−2}, mixed with K distractor chains (multi-chain context).
   - Candidates: sets for f{n−2}, f{n−1}, and f_n (three-level ladder). Earlier variants used only f{n−1} and f_n (two-level) or no candidates (chain-only).
-- Answer: final token a = f_n(y_{n−1}).
-- Metric: Exact Match (EM) with normalization. We also track candidate compliance and structural coherence across ladder levels.
+- Implicit prompt (bag-of-facts):
+  - Facts: m chains’ first n−1 hops (balanced exactly m lines per relation), shuffled.
+- Answers: explicit → final token a = f_n(y_{n−1}); implicit → y_{n−1} token.
+- Metric: Exact Match (EM) with normalization.
 
 ## Key results
 
@@ -16,7 +19,7 @@ This document summarizes the results and insights from the current benchmark, wh
 - Chain-only (f1..f{n−1} shown, no candidates): EM ≈ 1.000 at n=4 (trivial; answer can be read directly).
 - Two-level ladder (f{n−1}, f_n), single-chain facts: high EM even at larger n (e.g., n=5 → 0.920; n=8 → 0.950). Difficulty does not scale with n because head-equality cues suffice.
 
-### B. Hard setting (multi-chain + shuffled facts + three-level ladder)
+### B. Explicit (multi-chain + shuffled facts + three-level ladder)
 - Parameters (latest sweep 2025-09-14): items=24, k0=k1=k2=6, context_chains=8, M=256, seeds∈{7,13,23}, model=gpt-4.1-mini, temp=0.0.
 - Per-seed EM (n=4..6):
   - n=4: 0.958, 0.958, 1.000 (mean±sd ≈ 0.972±0.020)
@@ -28,6 +31,17 @@ This document summarizes the results and insights from the current benchmark, wh
   - Independent shuffling, balanced head exposure, unique tails, and multi-chain hygiene prevent simple frequency/order tells.
 
 Sweep artifacts saved under `runs/sweep_YYYYMMDD_HHMMSS/summary.csv` (e.g., `runs/sweep_20250914_201030/summary.csv`).
+
+### C. Implicit (bag-of-facts; no candidates)
+- Parameters (latest sweep 2025-09-14): items=24, m∈{4,8,12,16}, n∈{4..8}, M=256, seeds∈{7,13}, model=gpt-4.1-mini.
+- EM by (n, m) mean±sd:
+  - n=4: m=4 0.896±0.021; m=8 0.770±0.062; m=12 0.730±0.062; m=16 0.584±0.041
+  - n=5: m=4 0.584±0.041; m=8 0.291±0.084; m=12 0.354±0.062; m=16 0.146±0.021
+  - n=6: m=4 0.334±0.083; m=8 0.209±0.041; m=12 0.104±0.021; m=16 0.125±0.042
+  - n=7: m=4 0.312±0.104; m=8 0.146±0.021; m=12 0.125±0.000; m=16 0.042±0.000
+  - n=8: m=4 0.250±0.083; m=8 0.062±0.062; m=12 0.084±0.084; m=16 0.062±0.021
+- Collapsed means: by n → 4:0.745, 5:0.344, 6:0.193, 7:0.156, 8:0.115; by m → 4:0.475, 8:0.296, 12:0.279, 16:0.192.
+- Takeaway: accuracy drops sharply with n and with larger m, confirming the multi-chain entanglement pressure in the implicit setup.
 
 ## Error analysis highlights (hard setting)
 - Non-EM errors are largely composition mistakes across ladder levels (f_{n−2}→f_{n−1}→f_n), not candidate non-compliance.

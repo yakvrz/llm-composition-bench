@@ -49,11 +49,15 @@ def compute_em(results_path: Path) -> tuple[int, int, float]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--items', type=int, default=60)
+    ap.add_argument('--approach', type=str, default='explicit', choices=['explicit', 'implicit'])
     ap.add_argument('--hops', type=str, default='4')
+    ap.add_argument('--k', type=int, default=None)
     ap.add_argument('--k0s', type=str, default='6')
     ap.add_argument('--k1s', type=str, default='6')
     ap.add_argument('--k2s', type=str, default='6')
+    ap.add_argument('--Ls', type=str, default='3')
     ap.add_argument('--contexts', type=str, default='8')
+    ap.add_argument('--m_list', type=str, default='6', help='implicit only: list of m (number of chains) values')
     ap.add_argument('--M', type=int, default=512)
     ap.add_argument('--seeds', type=str, default='7')
     ap.add_argument('--model', type=str, default='gpt-4.1')
@@ -69,7 +73,9 @@ def main():
     k0_list = parse_list(args.k0s)
     k1_list = parse_list(args.k1s)
     k2_list = parse_list(args.k2s)
+    L_list = parse_list(args.Ls)
     contexts_list = parse_list(args.contexts)
+    m_list = parse_list(args.m_list)
     seeds_list = parse_list(args.seeds)
 
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -79,8 +85,19 @@ def main():
     ensure_dir(data_dir)
 
     rows = []
-    for n, k0, k1, k2, ctx, seed in itertools.product(hops_list, k0_list, k1_list, k2_list, contexts_list, seeds_list):
-        tag = f"n{n}_k0{k0}_k1{k1}_k2{k2}_c{ctx}_s{seed}"
+    if args.approach == 'explicit':
+        combos = list(itertools.product(hops_list, L_list, k0_list, k1_list, k2_list, contexts_list, seeds_list))
+    else:
+        combos = list(itertools.product(hops_list, m_list, seeds_list))
+    total_combos = len(combos)
+    print(f"Starting sweep ({args.approach}) with {total_combos} combinations...", flush=True)
+    for idx, combo in enumerate(combos, start=1):
+        if args.approach == 'explicit':
+            n, Lval, k0, k1, k2, ctx, seed = combo
+            tag = f"exp_n{n}_L{Lval}_k0{k0}_k1{k1}_k2{k2}_c{ctx}_s{seed}"
+        else:
+            n, mval, seed = combo
+            tag = f"imp_n{n}_m{mval}_s{seed}"
         out_dir = root / tag
         ensure_dir(out_dir)
         ds_path = data_dir / f"synth_{tag}.jsonl"
@@ -88,32 +105,43 @@ def main():
         sum_path = out_dir / 'summary.txt'
 
         # 1) Generate
-        gen_cmd = [
-            sys.executable, 'generate_data.py',
-            '--items', str(args.items),
-            '--hops', str(n),
-            '--k0', str(k0), '--k1', str(k1), '--k2', str(k2),
-            '--context_chains', str(ctx),
-            '--M', str(args.M),
-            '--seed', str(seed),
-            '--out', str(ds_path),
-        ]
+        print(f"[{idx}/{total_combos}] GEN {tag} ...", flush=True)
+        if args.approach == 'explicit':
+            gen_cmd = [
+                sys.executable, 'explicit/generate.py',
+                '--items', str(args.items), '--hops', str(n), '--L', str(Lval),
+            ]
+            if args.k is not None:
+                gen_cmd += ['--k', str(args.k)]
+            else:
+                gen_cmd += ['--k0', str(k0), '--k1', str(k1), '--k2', str(k2)]
+            gen_cmd += [
+                '--context_chains', str(ctx), '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
+            ]
+        else:
+            gen_cmd = [
+                sys.executable, 'implicit/generate.py',
+                '--items', str(args.items), '--hops', str(n), '--m', str(mval),
+                '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
+            ]
         rc, out = run_cmd(gen_cmd)
         (out_dir / 'gen_stdout.txt').write_text(out, encoding='utf-8')
         if rc != 0:
-            print(f"GEN FAIL {tag}")
+            print(f"[{idx}/{total_combos}] GEN FAIL {tag}", flush=True)
             continue
 
         # 2) Evaluate
-        eval_cmd = [
-            sys.executable, 'evaluate.py',
-            '--in', str(ds_path),
-            '--out', str(res_path),
-            '--model', args.model,
-            '--temp', str(args.temp),
-            '--max_output_tokens', str(args.max_output_tokens),
-            '--n', str(args.items),
-        ]
+        print(f"[{idx}/{total_combos}] EVAL {tag} ...", flush=True)
+        if args.approach == 'explicit':
+            eval_cmd = [
+                sys.executable, 'explicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items),
+            ]
+        else:
+            eval_cmd = [
+                sys.executable, 'implicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items),
+            ]
         if args.save_prompt: eval_cmd.append('--save_prompt')
         if args.save_raw_output: eval_cmd.append('--save_raw_output')
         if args.log_first and args.log_first > 0:
@@ -122,20 +150,20 @@ def main():
         rc, out = run_cmd(eval_cmd, env=os.environ.copy())
         sum_path.write_text(out, encoding='utf-8')
         correct, total, acc = compute_em(res_path)
-        rows.append({
-            'n': n, 'k0': k0, 'k1': k1, 'k2': k2, 'contexts': ctx, 'seed': seed,
-            'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)
-        })
-        print(f"DONE {tag}: {correct}/{total} = {acc:.3f}")
+        if args.approach == 'explicit':
+            rows.append({'approach': 'explicit', 'n': n, 'L': Lval, 'k0': k0, 'k1': k1, 'k2': k2, 'k': (args.k if args.k is not None else ''), 'contexts': ctx, 'm': '', 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
+        else:
+            rows.append({'approach': 'implicit', 'n': n, 'L': '', 'k0': '', 'k1': '', 'k2': '', 'k': '', 'contexts': '', 'm': mval, 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
+        print(f"[{idx}/{total_combos}] DONE {tag}: {correct}/{total} = {acc:.3f}", flush=True)
 
     # Write CSV summary
     csv_path = root / 'summary.csv'
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        w = csv.DictWriter(f, fieldnames=['n','k0','k1','k2','contexts','seed','items','correct','acc','dir'])
+        w = csv.DictWriter(f, fieldnames=['approach','n','L','k0','k1','k2','k','contexts','m','seed','items','correct','acc','dir'])
         w.writeheader()
         for r in rows:
             w.writerow(r)
-    print(f"\nSweep complete. Summary: {csv_path}")
+    print(f"\nSweep complete. Summary: {csv_path}", flush=True)
 
 
 if __name__ == '__main__':
