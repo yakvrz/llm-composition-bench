@@ -117,6 +117,31 @@ python implicit/evaluate.py --in data/implicit.jsonl --out runs/$TS/implicit.jso
 python sweep.py --approach implicit --items 24 --hops 4,5,6,7,8 --m_list 4,8,12,16 --seeds 7,13
 ```
 
+## Experiment runner
+
+For convenience, use `exp.py` to orchestrate sweeps, plots, and a run index:
+
+```bash
+# Run a sweep from a JSON config, auto-plot, and index the run
+python exp.py run --config configs/implicit_small.json
+python exp.py run --config configs/explicit_small.json
+
+# Generate plots for an existing summary
+python exp.py plot --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir plots/implicit/sweep_YYYYMMDD_HHMMSS
+
+# Append a short section to REPORTS.md for a run
+python exp.py report --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit
+```
+
+Outputs are saved under `plots/<approach>/<sweep_tag>/` and indexed in `runs/index.csv`.
+
+## Diagnostics and baselines
+
+- Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
+- Pointer baseline (implicit): `--baseline pointer_f_n1` outputs the tail of the first f_{n−1} line; expected ≈1/m.
+- Ablation (implicit): generator flags `--ablate_inner --ablate_hop j` remove one inner hop across all chains to induce ambiguity; EM should approach ≈1/m.
+- Path-collision stress (explicit): generator flag `--path_collision_stress` ensures coherent distractor paths across ladder levels in candidate blocks.
+
 ## Evaluation details
 
 - **Explicit Prompt:** mixed chain facts from target + distractor chains + laddered candidate sets for f_{n-2}..f_n; answer with the final token.

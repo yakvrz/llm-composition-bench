@@ -13,6 +13,12 @@ This document summarizes the results and insights from the current benchmark, wh
 - Answers: explicit → final token a = f_n(y_{n−1}); implicit → y_{n−1} token.
 - Metric: Exact Match (EM) with normalization.
 
+Additional diagnostics supported:
+- Order invariance (`--order_trials T`): reshuffle displays T times; ΔEM ≈ 0 expected.
+- Pointer baseline (implicit) (`--baseline pointer_f_n1`): tail of first f_{n−1} line.
+- Ablation (implicit) (`--ablate_inner --ablate_hop j`): remove one inner hop.
+- Path-collision stress (explicit) (`--path_collision_stress`): coherent distractor paths.
+
 ## Key results
 
 ### A. Easier settings (single-chain or two-level ladder)
@@ -42,6 +48,10 @@ Sweep artifacts saved under `runs/sweep_YYYYMMDD_HHMMSS/summary.csv` (e.g., `run
   - n=8: m=4 0.250±0.083; m=8 0.062±0.062; m=12 0.084±0.084; m=16 0.062±0.021
 - Collapsed means: by n → 4:0.745, 5:0.344, 6:0.193, 7:0.156, 8:0.115; by m → 4:0.475, 8:0.296, 12:0.279, 16:0.192.
 - Takeaway: accuracy drops sharply with n and with larger m, confirming the multi-chain entanglement pressure in the implicit setup.
+
+Recent small runs (via exp.py):
+- Implicit small (n∈{4,5,6}, m∈{4,8,12}, seeds={7,13}): see `plots/implicit/sweep_YYYYMMDD*/`.
+- Explicit small (n∈{4,6,8}, L∈{2,3}, seed={7}): see `plots/explicit/sweep_YYYYMMDD*/`.
 
 ## Error analysis highlights (hard setting)
 - Non-EM errors are largely composition mistakes across ladder levels (f_{n−2}→f_{n−1}→f_n), not candidate non-compliance.

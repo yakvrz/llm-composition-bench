@@ -1,0 +1,16 @@
+{
+  "approach": "explicit",
+  "items": 24,
+  "hops": [4, 6, 8],
+  "Ls": [2, 3],
+  "k": 6,
+  "contexts": [8],
+  "seeds": [7],
+  "M": 256,
+  "model": "gpt-4.1-mini",
+  "temp": 0.0,
+  "max_output_tokens": 16,
+  "order_trials": 1,
+  "path_collision_stress": false
+}
+

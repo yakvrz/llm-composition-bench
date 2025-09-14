@@ -67,6 +67,13 @@ def main():
     ap.add_argument('--save_prompt', action='store_true')
     ap.add_argument('--save_raw_output', action='store_true')
     ap.add_argument('--root', type=str, default='runs')
+    ap.add_argument('--flat_outputs', action='store_true', help='write outputs in a single summary dir with tagged filenames')
+    # Extras
+    ap.add_argument('--order_trials', type=int, default=1)
+    ap.add_argument('--baseline', type=str, default='', choices=['', 'pointer_f_n1'])
+    ap.add_argument('--ablate_inner', action='store_true')
+    ap.add_argument('--ablate_hop', type=int, default=2)
+    ap.add_argument('--path_collision_stress', action='store_true')
     args = ap.parse_args()
 
     hops_list = parse_list(args.hops)
@@ -81,6 +88,9 @@ def main():
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
     root = Path(args.root) / f'sweep_{ts}'
     ensure_dir(root)
+    if args.flat_outputs:
+        flat_dir = root / 'flat'
+        ensure_dir(flat_dir)
     data_dir = Path('data')
     ensure_dir(data_dir)
 
@@ -99,10 +109,15 @@ def main():
             n, mval, seed = combo
             tag = f"imp_n{n}_m{mval}_s{seed}"
         out_dir = root / tag
-        ensure_dir(out_dir)
+        if not args.flat_outputs:
+            ensure_dir(out_dir)
         ds_path = data_dir / f"synth_{tag}.jsonl"
-        res_path = out_dir / 'results.jsonl'
-        sum_path = out_dir / 'summary.txt'
+        if args.flat_outputs:
+            res_path = (flat_dir / f"results_{tag}.jsonl")
+            sum_path = (flat_dir / f"summary_{tag}.txt")
+        else:
+            res_path = out_dir / 'results.jsonl'
+            sum_path = out_dir / 'summary.txt'
 
         # 1) Generate
         print(f"[{idx}/{total_combos}] GEN {tag} ...", flush=True)
@@ -118,14 +133,21 @@ def main():
             gen_cmd += [
                 '--context_chains', str(ctx), '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
             ]
+            if args.path_collision_stress:
+                gen_cmd += ['--path_collision_stress']
         else:
             gen_cmd = [
                 sys.executable, 'implicit/generate.py',
                 '--items', str(args.items), '--hops', str(n), '--m', str(mval),
                 '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
             ]
+            if args.ablate_inner:
+                gen_cmd += ['--ablate_inner', '--ablate_hop', str(args.ablate_hop)]
         rc, out = run_cmd(gen_cmd)
-        (out_dir / 'gen_stdout.txt').write_text(out, encoding='utf-8')
+        if args.flat_outputs:
+            (flat_dir / f'gen_stdout_{tag}.txt').write_text(out, encoding='utf-8')
+        else:
+            (out_dir / 'gen_stdout.txt').write_text(out, encoding='utf-8')
         if rc != 0:
             print(f"[{idx}/{total_combos}] GEN FAIL {tag}", flush=True)
             continue
@@ -135,13 +157,15 @@ def main():
         if args.approach == 'explicit':
             eval_cmd = [
                 sys.executable, 'explicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
-                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items),
+                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             ]
         else:
             eval_cmd = [
                 sys.executable, 'implicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
-                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items),
+                '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             ]
+            if args.baseline:
+                eval_cmd += ['--baseline', args.baseline]
         if args.save_prompt: eval_cmd.append('--save_prompt')
         if args.save_raw_output: eval_cmd.append('--save_raw_output')
         if args.log_first and args.log_first > 0:

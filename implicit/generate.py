@@ -61,6 +61,8 @@ def main():
     ap.add_argument("--out", type=str, default="data/implicit.jsonl")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--sleep", type=float, default=0.0)
+    ap.add_argument("--ablate_inner", action="store_true", help="remove all edges for one inner hop f_j to create ambiguity")
+    ap.add_argument("--ablate_hop", type=int, default=2, help="which inner hop j to ablate (1<j<n-1)")
     args = ap.parse_args()
 
     assert args.m >= 4, "m must be >= 4"
@@ -105,11 +107,19 @@ def main():
                     facts.append([prev_local, rel, nxt_local])
                     prev_local = nxt_local
 
-            # Balanced: exactly m lines per relation f1..f{n-1}
+            # Optional ablation of one inner hop f_j
+            if args.ablate_inner:
+                j = int(args.ablate_hop)
+                assert 1 < j < args.hops - 0, "ablate_hop must be an inner hop (2..n-2 or 2..n-1 if desired)"
+                facts = [tr for tr in facts if tr[1] != f"f{j}"]
+
+            # Balanced counts: exactly m lines per relation except ablated hop
             counts = {f"f{h+1}": 0 for h in range(args.hops - 1)}
             for _, r, _ in facts:
                 counts[r] += 1
             for r, c in counts.items():
+                if args.ablate_inner and r == f"f{args.ablate_hop}":
+                    continue
                 assert c == args.m, f"Unbalanced relation count for {r}: {c} != {args.m}"
 
             # Choose target chain

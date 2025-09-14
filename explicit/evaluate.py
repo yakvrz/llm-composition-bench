@@ -94,6 +94,7 @@ def main():
     ap.add_argument("--save_prompt", action="store_true")
     ap.add_argument("--save_raw_output", action="store_true")
     ap.add_argument("--log_first", type=int, default=0)
+    ap.add_argument("--order_trials", type=int, default=1, help="number of shuffle trials per item (facts and candidate blocks)")
     args = ap.parse_args()
 
     client = OpenAI()
@@ -112,16 +113,32 @@ def main():
         has_any_block = any(isinstance(v, list) and k.startswith("candidates_f") for k, v in item.items() if isinstance(k, str))
         assert has_any_block, "No candidate blocks present (expected keys like candidates_f{i})"
         aliases = item.get("answer_aliases") or [item["answer_id"]]
-        prompt = build_prompt(item)
-        try:
-            resp = client.responses.create(model=args.model, input=prompt, temperature=args.temp, max_output_tokens=args.max_output_tokens)
-            raw_text = (resp.output_text or "").strip()
-            pred = next((ln.strip() for ln in raw_text.splitlines() if ln.strip()), raw_text)
-            raw = raw_text
-            err = None
-        except Exception as e:
-            pred = ""; raw = ""; err = str(e)
-        is_em = exact_match(pred, aliases)
+        # perform order trials by reshuffling blocks client-side
+        import random as _rnd
+        trial_ems = []
+        for t in range(max(1, int(args.order_trials))):
+            _rnd.seed(2024 + t)
+            # copy item and reshuffle facts and each candidates_f* block independently
+            trial_item = dict(item)
+            fc = list(item.get("facts_chain") or [])
+            _rnd.shuffle(fc)
+            trial_item["facts_chain"] = fc
+            for k, v in list(item.items()):
+                if isinstance(k, str) and k.startswith("candidates_f") and isinstance(v, list):
+                    vv = list(v)
+                    _rnd.shuffle(vv)
+                    trial_item[k] = vv
+            prompt = build_prompt(trial_item)
+            try:
+                resp = client.responses.create(model=args.model, input=prompt, temperature=args.temp, max_output_tokens=args.max_output_tokens)
+                raw_text = (resp.output_text or "").strip()
+                pred = next((ln.strip() for ln in raw_text.splitlines() if ln.strip()), raw_text)
+                raw = raw_text
+                err = None
+            except Exception as e:
+                pred = ""; raw = ""; err = str(e)
+            trial_ems.append(int(exact_match(pred, aliases)))
+        is_em = sum(trial_ems) / len(trial_ems) >= 0.5
         perf["total"]["n"] += 1
         perf["total"]["correct"] += int(is_em)
         perf["by_n"][n]["n"] += 1
@@ -130,6 +147,7 @@ def main():
         for k, v in item.items():
             if isinstance(k, str) and k.startswith("candidates_f"):
                 rec[k] = v
+        rec["order_trials"] = int(args.order_trials)
         outputs.append(rec)
         if args.sleep > 0:
             time.sleep(args.sleep)

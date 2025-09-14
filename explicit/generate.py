@@ -62,6 +62,7 @@ def main():
     ap.add_argument("--seed", type=int, default=7, help="random seed")
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to sleep between items")
     ap.add_argument("--chain_only_ordered", action="store_true", help="emit only the target chain facts in order (sanity check mode)")
+    ap.add_argument("--path_collision_stress", action="store_true", help="ensure distractor candidates form coherent wrong paths across ladder blocks")
     args = ap.parse_args()
 
     layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
@@ -196,6 +197,22 @@ def main():
                 block = sample_candidates(heads_layer, func_map, rel, correct_head, k_for(i_func))
                 random.shuffle(block)
                 candidates_blocks[f"candidates_f{i_func}"] = block
+
+            # Path-collision stress: ensure for each non-gold head at f_{n-1}, there is a corresponding f_n triple
+            if args.path_collision_stress:
+                fn1_key = f"candidates_f{args.hops - 1}"
+                fn_key = f"candidates_f{args.hops}"
+                if fn1_key in candidates_blocks and fn_key in candidates_blocks:
+                    heads_fn = {h for h, _, _ in candidates_blocks[fn_key]}
+                    augmented = False
+                    for h, r, t in list(candidates_blocks[fn1_key]):
+                        if h not in heads_fn:
+                            # add corresponding f_n mapping for this head
+                            candidates_blocks[fn_key].append([h, f"f{args.hops}", functions[args.hops - 1][h]])
+                            heads_fn.add(h)
+                            augmented = True
+                    if augmented:
+                        random.shuffle(candidates_blocks[fn_key])
             q = _question_laddered(args.hops, x)
             item = {
                 "id": f"SYN-{i:06d}",
@@ -229,24 +246,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-#!/usr/bin/env python3
-"""
-Wrapper for the explicit (candidate-based) generator.
-Delegates to the repository root `generate_data.py`.
-"""
-import sys
-from pathlib import Path
-
-
-def main():
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root))
-    import generate_data as _gen
-    _gen.main()
-
-
-if __name__ == "__main__":
-    main()
-
-
