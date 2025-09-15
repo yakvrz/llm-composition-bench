@@ -7,7 +7,7 @@ Creates a run under runs/<approach>/diag_<timestamp>/ with:
   - results/
   - plots/
   - summary.csv (single-row)
-  - results.md (short report)
+  - results.json (structured report)
 
 Flags differ by approach:
 - explicit: --n, --L, --k (or k0/k1/k2), --contexts, --path_collision_stress, --block_head_balance, --alias_heads_per_block
@@ -71,17 +71,29 @@ def write_summary(summary_path: Path, row: dict):
         w.writerow(row)
 
 
-def write_results_md(run_root: Path, approach: str, row: dict):
-    lines = [
-        f"### {run_root.name} ({approach})",
-        f"- Summary: `{(run_root / 'summary.csv').as_posix()}`",
-        f"- Plots: `{(run_root / 'plots').as_posix()}`",
-    ]
-    if approach == 'implicit':
-        lines.append(f"- EM: n={row['n']}, m={row['m']} → {row['acc']}")
-    else:
-        lines.append(f"- EM: n={row['n']}, L={row['L']} → {row['acc']}")
-    (run_root / 'results.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+def write_results_json(run_root: Path, approach: str, rows: list[dict], args):
+    import json as _json
+    report = {
+        'approach': approach,
+        'tag': run_root.name,
+        'summary_csv': (run_root / 'summary.csv').as_posix(),
+        'plots_dir': (run_root / 'plots').as_posix(),
+        'params': {
+            'items': args.items,
+            'n': args.n,
+            'M': args.M,
+            'seed': args.seed,
+            'model': args.model,
+            'temp': args.temp,
+            'max_output_tokens': args.max_output_tokens,
+            'order_trials': args.order_trials,
+            'concurrency': args.concurrency,
+            'max_retries': args.max_retries,
+            'retry_backoff': args.retry_backoff,
+        },
+        'variants': rows,
+    }
+    (run_root / 'results.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
 
 
 def main():
@@ -221,16 +233,15 @@ def main():
     plt.savefig(plots_dir / 'bars_lift_by_variant.png')
     plt.close()
 
-    # Minimal results.md
-    # Write a brief results.md listing all variants and EMs
-    lines = [f"### {run_root.name} ({args.approach})", f"- Summary: `{(run_root / 'summary.csv').as_posix()}`", f"- Plots: `{plots_dir.as_posix()}`", "", "Variants:"]
-    for r in rows:
-        if args.approach == 'explicit':
-            lines.append(f"- {r['variant']}: n={r['n']}, L={r['L']} → {r['acc']}")
-        else:
-            lines.append(f"- {r['variant']}: n={r['n']}, m={r['m']} → {r['acc']}")
-    (run_root / 'results.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
-    print(f"Diagnostics complete. Summary: {run_root/'summary.csv'}\nPlots: {plots_dir}\nReport: {run_root/'results.md'}")
+    # Remove any stale results.md and write JSON
+    md_path = run_root / 'results.md'
+    try:
+        if md_path.exists():
+            md_path.unlink()
+    except Exception:
+        pass
+    write_results_json(run_root, args.approach, rows, args)
+    print(f"Diagnostics complete. Summary: {run_root/'summary.csv'}\nPlots: {plots_dir}\nReport: {run_root/'results.json'}")
 
 
 if __name__ == '__main__':

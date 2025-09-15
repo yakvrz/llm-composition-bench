@@ -256,16 +256,13 @@ def cmd_report(args):
                 kv('ablate_hop', cfg.get('ablate_hop', '')),
             ])
 
-    section = [
-        f"### {tag} ({approach})",
-        f"- Summary: `{summary.as_posix()}`",
-        f"- Plots: `{plots_dir.as_posix()}`",
-    ] + label_line + params_lines + [
-        summarize_for_report(summary, approach),
-        "",
-    ]
-    (run_root / 'results.md').open('w', encoding='utf-8').write('\n'.join(section) + '\n')
-    print(f"Wrote results.md for {tag} → {run_root/'results.md'}")
+    # results.md deprecated; ensure any existing is removed
+    md_path = run_root / 'results.md'
+    try:
+        if md_path.exists():
+            md_path.unlink()
+    except Exception:
+        pass
 
     # Additionally write a structured JSON report including lift-over-chance aggregates
     import csv as _csv, json as _json, statistics as _stats

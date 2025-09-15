@@ -11,6 +11,10 @@
   "temp": 0.0,
   "max_output_tokens": 16,
   "order_trials": 1,
-  "path_collision_stress": false
+  "label": "explicit-easy",
+  "path_collision_stress": false,
+  "block_head_balance": false,
+  "alias_heads_per_block": false,
+  "id_width": 3
 }
 
