@@ -267,6 +267,92 @@ def cmd_report(args):
     (run_root / 'results.md').open('w', encoding='utf-8').write('\n'.join(section) + '\n')
     print(f"Wrote results.md for {tag} → {run_root/'results.md'}")
 
+    # Additionally write a structured JSON report including lift-over-chance aggregates
+    import csv as _csv, json as _json, statistics as _stats
+    rows: list[dict] = []
+    with summary.open('r', encoding='utf-8') as f:
+        for r in _csv.DictReader(f):
+            rows.append(r)
+
+    report: dict = {
+        'approach': approach,
+        'tag': tag,
+        'label': label_val or None,
+        'summary_csv': summary.as_posix(),
+        'plots_dir': plots_dir.as_posix(),
+        'params': cfg or None,
+        'aggregates': {},
+    }
+
+    if approach == 'implicit':
+        # group by (n,m)
+        from collections import defaultdict
+        by_nm: dict[tuple[int,int], list[float]] = defaultdict(list)
+        for r in rows:
+            if r.get('approach') != 'implicit':
+                continue
+            try:
+                n = int(r['n']); m = int(r['m']); acc = float(r['acc'])
+            except Exception:
+                continue
+            by_nm[(n,m)].append(acc)
+        out = []
+        for (n,m), vals in sorted(by_nm.items()):
+            if not vals:
+                continue
+            acc_mean = _stats.mean(vals)
+            chance = (0.0 if m <= 1 else 1.0/m)
+            lift = (acc_mean - chance) / (1.0 - chance) if (1.0 - chance) > 0 else None
+            out.append({'n': n, 'm': m, 'acc_mean': round(acc_mean, 3), 'chance': round(chance, 3), 'lift_mean': (None if lift is None else round(lift, 3))})
+        report['aggregates']['by_nm'] = out
+    else:
+        # group by (n,L)
+        from collections import defaultdict
+        by_nL: dict[tuple[int,int], list[tuple[float,int|None,list[int]]]] = defaultdict(list)
+        # collect acc and k_last per row; also seeds
+        for r in rows:
+            if r.get('approach') == 'implicit':
+                continue
+            try:
+                n = int(r['n']); L = int(r.get('L') or 0); acc = float(r['acc'])
+            except Exception:
+                continue
+            k_last: int | None = None
+            try:
+                if r.get('k'):
+                    k_last = int(r['k'])
+                else:
+                    ks = [int(r[x]) for x in ('k0','k1','k2') if r.get(x)]
+                    k_last = ks[-1] if ks else None
+            except Exception:
+                k_last = None
+            seed = None
+            try:
+                seed = int(r.get('seed') or 0)
+            except Exception:
+                seed = None
+            by_nL[(n,L)].append((acc, k_last, [seed] if seed is not None else []))
+        out = []
+        for (n,L), entries in sorted(by_nL.items()):
+            if not entries:
+                continue
+            accs = [e[0] for e in entries]
+            seeds: list[int] = []
+            k_vals = [e[1] for e in entries if e[1] is not None]
+            for e in entries:
+                seeds.extend(e[2])
+            acc_mean = _stats.mean(accs)
+            k_last = (k_vals[0] if k_vals else None)
+            chance = (None if (k_last is None or k_last <= 1) else 1.0/ k_last)
+            lift = None
+            if chance is not None and (1.0 - chance) > 0:
+                lift = (acc_mean - chance) / (1.0 - chance)
+            out.append({'n': n, 'L': L, 'acc_mean': round(acc_mean, 3), 'k_last': k_last, 'chance': (None if chance is None else round(chance,3)), 'lift_mean': (None if lift is None else round(lift,3)), 'seeds': sorted({s for s in seeds if s is not None})})
+        report['aggregates']['by_nL'] = out
+
+    (run_root / 'results.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
+    print(f"Wrote results.json for {tag} → {run_root/'results.json'}")
+
 
 def main():
     ap = argparse.ArgumentParser()
