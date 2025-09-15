@@ -91,6 +91,7 @@ def main():
     ap.add_argument("--concurrency", type=int, default=4, help="number of parallel API calls")
     ap.add_argument("--max_retries", type=int, default=3, help="max retries on API errors")
     ap.add_argument("--retry_backoff", type=float, default=1.0, help="initial backoff seconds for retries")
+    ap.add_argument("--log_every", type=int, default=1, help="print progress every N items (1=every item)")
     args = ap.parse_args()
 
     client = OpenAI()
@@ -177,7 +178,8 @@ def main():
             if fout:
                 fout.write(json.dumps(rec_local, ensure_ascii=False) + "\n")
                 fout.flush()
-            print(f"[explicit/eval] {idx+1}/{len(items)} em={is_em_local}", flush=True)
+            if ((idx + 1) % max(1, int(args.log_every)) == 0) or ((idx + 1) == len(items)):
+                print(f"[explicit/eval] {idx+1}/{len(items)} em={is_em_local}", flush=True)
         return rec_local
 
     if int(args.concurrency) > 1:

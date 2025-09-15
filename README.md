@@ -12,6 +12,8 @@
   - `implicit/generate.py` — generator emitting m chains’ first n−1 hops (balanced per relation)
   - `implicit/evaluate.py` — evaluator asking for y_{n−1} from the bag
 - `scripts/sweep.py` — sweep utility (`runs/<approach>/<tag>/` layout: data/, results/, plots/, summary.csv)
+- `scripts/run_sweep.py` — orchestrates sweep from JSON, plots, indexes runs/index.csv, and writes per-run results.md
+- `scripts/run_diagnostics.py` — run a single param combo with diagnostics variants; writes one consolidated diagnostics folder with variant plots and results
 
 ## Data formats (JSONL)
 
@@ -144,7 +146,19 @@ Unified run layout
 ## Diagnostics and baselines
 
 - Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
-- Concurrency: evaluators support `--concurrency K` with retries (`--max_retries`, `--retry_backoff`) and progressive writes/prints.
+- Concurrency: evaluators support `--concurrency K` with retries (`--max_retries`, `--retry_backoff`) and progressive writes/prints. Use `--log_every` to throttle per-item logging.
+
+### One-off diagnostics
+
+Run explicit variants in one folder (n=6, L=3, k=6, contexts=8):
+```
+python scripts/run_diagnostics.py --approach explicit --items 60 --n 6 --L 3 --k 6 --contexts 8 --M 256 --seed 7 --variants control,path,bal,alias,all
+```
+
+Run implicit variants in one folder (n=6, m=8):
+```
+python scripts/run_diagnostics.py --approach implicit --items 60 --n 6 --m 8 --M 256 --seed 7 --variants control,ablate,baseline
+```
 
 ## Tests
 
