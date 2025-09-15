@@ -198,8 +198,8 @@ def main():
             rows.append({'approach': 'implicit', 'n': n, 'L': '', 'k0': '', 'k1': '', 'k2': '', 'k': '', 'contexts': '', 'm': mval, 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
         print(f"[sweep] [{idx}/{total_combos}] DONE {tag}: {correct}/{total} = {acc:.3f}", flush=True)
 
-    # Write CSV summary
-    csv_path = run_root / 'summary.csv'
+    # Write CSV results (was summary.csv)
+    csv_path = run_root / 'results.csv'
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=['approach','n','L','k0','k1','k2','k','contexts','m','seed','items','correct','acc','dir'])
         w.writeheader()

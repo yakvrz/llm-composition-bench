@@ -55,7 +55,7 @@ def infer_tag_from_summary(summary: Path) -> str:
 def write_index_row(summary: Path, approach: str, config_path: Path, plots_dir: Path, extras: dict):
     index_path = Path('runs') / 'index.csv'
     ensure_dir(index_path.parent)
-    header = ['ts','approach','config','sweep_root','summary_csv','plots_dir','model','items','extras']
+    header = ['ts','approach','config','sweep_root','results_csv','plots_dir','model','items','extras']
     exists = index_path.exists()
     if not exists:
         index_path.write_text(','.join(header) + '\n', encoding='utf-8')
@@ -196,7 +196,8 @@ def cmd_report(args):
         import csv, json as _json
         with index_path.open('r', encoding='utf-8') as f:
             for r in csv.DictReader(f):
-                if r.get('summary_csv') == s.as_posix():
+                match_path = r.get('results_csv') or r.get('summary_csv')
+                if match_path == s.as_posix():
                     extras_str = r.get('extras') or ''
                     try:
                         # undo "," replacement for CSV safety
@@ -275,7 +276,7 @@ def cmd_report(args):
         'approach': approach,
         'tag': tag,
         'label': label_val or None,
-        'summary_csv': summary.as_posix(),
+        'results_csv': summary.as_posix(),
         'plots_dir': plots_dir.as_posix(),
         'params': cfg or None,
         'aggregates': {},
@@ -347,8 +348,8 @@ def cmd_report(args):
             out.append({'n': n, 'L': L, 'acc_mean': round(acc_mean, 3), 'k_last': k_last, 'chance': (None if chance is None else round(chance,3)), 'lift_mean': (None if lift is None else round(lift,3)), 'seeds': sorted({s for s in seeds if s is not None})})
         report['aggregates']['by_nL'] = out
 
-    (run_root / 'results.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
-    print(f"Wrote results.json for {tag} → {run_root/'results.json'}")
+    (run_root / 'summary.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
+    print(f"Wrote summary.json for {tag} → {run_root/'summary.json'}")
 
 
 def main():

@@ -6,8 +6,8 @@ Creates a run under runs/<approach>/diag_<timestamp>/ with:
   - data/
   - results/
   - plots/
-  - summary.csv (single-row)
-  - results.json (structured report)
+  - results.csv (single-row)
+  - summary.json (structured report)
 
 Flags differ by approach:
 - explicit: --n, --L, --k (or k0/k1/k2), --contexts, --path_collision_stress, --block_head_balance, --alias_heads_per_block
@@ -76,7 +76,7 @@ def write_results_json(run_root: Path, approach: str, rows: list[dict], args):
     report = {
         'approach': approach,
         'tag': run_root.name,
-        'summary_csv': (run_root / 'summary.csv').as_posix(),
+        'results_csv': (run_root / 'results.csv').as_posix(),
         'plots_dir': (run_root / 'plots').as_posix(),
         'params': {
             'items': args.items,
@@ -93,7 +93,7 @@ def write_results_json(run_root: Path, approach: str, rows: list[dict], args):
         },
         'variants': rows,
     }
-    (run_root / 'results.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
+    (run_root / 'summary.json').write_text(_json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
 
 
 def main():
@@ -192,9 +192,9 @@ def main():
             correct, total, acc = compute_em(rs)
             rows.append({'approach':'implicit','variant':var,'n':str(args.n),'L':'','k0':'','k1':'','k2':'','k':'','contexts':'','m':str(args.m),'seed':str(args.seed),'items':str(total),'correct':str(correct),'acc':f"{acc:.3f}",'dir': str(run_root / tag)})
 
-    # Write summary with variants
+    # Write results with variants
     fields = ['approach','variant','n','L','k0','k1','k2','k','contexts','m','seed','items','correct','acc','dir']
-    with open(run_root / 'summary.csv', 'w', newline='', encoding='utf-8') as f:
+    with open(run_root / 'results.csv', 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for r in rows:
@@ -241,7 +241,7 @@ def main():
     except Exception:
         pass
     write_results_json(run_root, args.approach, rows, args)
-    print(f"Diagnostics complete. Summary: {run_root/'summary.csv'}\nPlots: {plots_dir}\nReport: {run_root/'results.json'}")
+    print(f"Diagnostics complete. Summary: {run_root/'results.csv'}\nPlots: {plots_dir}\nReport: {run_root/'summary.json'}")
 
 
 if __name__ == '__main__':
