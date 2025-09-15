@@ -22,20 +22,54 @@ def iter_jsonl(path: str):
             yield json.loads(line)
 
 
-def extract_y_nm2(facts_chain: List[List[str]]) -> str:
-    if not facts_chain:
+def extract_start_from_question(question: str) -> str:
+    # Expect: "What is f{n} of f{n-1} of ... of f1 of START?"
+    # Take the last token-like before '?'
+    if not question:
         return ""
-    # Last tail from the chain facts (up to f_{n-2}) is y_{n-2}
-    return facts_chain[-1][2]
+    q = question.strip().rstrip('?')
+    parts = q.split(' of ')
+    if parts:
+        return parts[-1].strip()
+    return ""
 
 
-def extract_y_nm3(facts_chain: List[List[str]]) -> str:
-    if not facts_chain:
-        return ""
-    if len(facts_chain) < 2:
-        return facts_chain[0][0]
-    # The head of the last triple is y_{n-3}
-    return facts_chain[-1][0]
+def compute_chain_nodes(facts_chain: List[List[str]], n: int, start: str) -> Tuple[str, str]:
+    """Follow f1..f_{n-2} from start using provided chain facts.
+
+    Returns (y_{n-3}, y_{n-2}). If path cannot be followed, returns ("", "").
+    """
+    if not facts_chain or not start or n < 3:
+        return "", ""
+    # Build map for each relation r: head -> tail
+    rel_maps: Dict[str, Dict[str, str]] = {}
+    for h, r, t in facts_chain:
+        rel_maps.setdefault(r, {})[h] = t
+    cur = start
+    y_nm3 = ""
+    # walk f1..f_{n-2}
+    for hop_idx in range(1, max(1, n - 1)):
+        r = f"f{hop_idx}"
+        nxt = rel_maps.get(r, {}).get(cur)
+        if nxt is None:
+            return "", ""
+        if hop_idx == n - 3:
+            y_nm3 = cur
+        cur = nxt
+    y_nm2 = cur if n - 2 >= 1 else ""
+    return y_nm3, y_nm2
+
+
+def extract_y_nm2(facts_chain: List[List[str]], n: int, question: str) -> str:
+    start = extract_start_from_question(question)
+    _y_nm3, y_nm2 = compute_chain_nodes(facts_chain, n, start)
+    return y_nm2
+
+
+def extract_y_nm3(facts_chain: List[List[str]], n: int, question: str) -> str:
+    start = extract_start_from_question(question)
+    y_nm3, _y_nm2 = compute_chain_nodes(facts_chain, n, start)
+    return y_nm3
 
 
 def tails_of(cands: List[List[str]]) -> List[str]:
@@ -69,8 +103,8 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     fc = rec.get("facts_chain") or []
     c1 = rec.get("candidates_fn_1") or []
     c2 = rec.get("candidates_fn") or []
-    y_nm2 = extract_y_nm2(fc)
-    y_nm3 = extract_y_nm3(fc)
+    y_nm2 = extract_y_nm2(fc, n, rec.get("question", ""))
+    y_nm3 = extract_y_nm3(fc, n, rec.get("question", ""))
 
     final_tails = set(tails_of(c2))
     pred_in_final = pred in final_tails

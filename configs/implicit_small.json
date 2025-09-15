@@ -1,9 +1,9 @@
 {
   "approach": "implicit",
-  "items": 24,
+  "items": 120,
   "hops": [4, 5, 6],
   "m_list": [4, 8, 12],
-  "seeds": [7, 13],
+  "seeds": [7, 13, 23],
   "M": 256,
   "model": "gpt-4.1-mini",
   "temp": 0.0,

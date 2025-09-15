@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 """
-Plot sweep results as heatmaps and line plots.
-
-Usage examples:
-  python plot_sweep.py --summary runs/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/sweep_YYYYMMDD_HHMMSS/plots
-
-Outputs:
-  - For implicit: heatmap_acc_n_by_m.png, lines_acc_vs_m_by_n.png
-  - For explicit: lines_acc_vs_n_by_L.png (if fields present)
+Plot sweep results as heatmaps and line plots with lift overlays and per-block bars.
 """
 import argparse, csv, os
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def read_rows(summary_path: str):
@@ -28,7 +22,6 @@ def ensure_dir(p: str):
 
 
 def plot_implicit(rows, outdir: str):
-    # Aggregate by (n,m) across seeds
     by_nm = defaultdict(list)
     for r in rows:
         if r.get('approach') != 'implicit':
@@ -46,7 +39,6 @@ def plot_implicit(rows, outdir: str):
     ns = sorted({n for (n, _) in by_nm.keys()})
     ms = sorted({m for (_, m) in by_nm.keys()})
 
-    # Heatmap matrix
     import numpy as np
     mat = np.zeros((len(ns), len(ms)))
     for i, n in enumerate(ns):
@@ -54,7 +46,6 @@ def plot_implicit(rows, outdir: str):
             vals = by_nm.get((n, m), [])
             mat[i, j] = (sum(vals) / len(vals)) if vals else float('nan')
 
-    # Heatmap: EM vs (n,m)
     plt.figure(figsize=(10, 5))
     im = plt.imshow(mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
     plt.colorbar(im, label='EM')
@@ -67,7 +58,6 @@ def plot_implicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'heatmap_acc_n_by_m.png'))
     plt.close()
 
-    # Line plots: EM vs m for each n
     plt.figure(figsize=(10, 5))
     for n in ns:
         ys = []
@@ -84,7 +74,6 @@ def plot_implicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'lines_acc_vs_m_by_n.png'))
     plt.close()
 
-    # Lift-over-chance overlay (implicit): lift = (EM - 1/m) / (1 - 1/m)
     plt.figure(figsize=(10, 5))
     for n in ns:
         ys = []
@@ -106,7 +95,6 @@ def plot_implicit(rows, outdir: str):
 
 
 def plot_explicit(rows, outdir: str):
-    # Aggregate by (n,L) across seeds, using unified k or k0/k1/k2 if desired
     by_nL = defaultdict(list)
     for r in rows:
         if r.get('approach') == 'implicit':
@@ -131,7 +119,6 @@ def plot_explicit(rows, outdir: str):
             vals = by_nL.get((n, L), [])
             mat[i, j] = (sum(vals) / len(vals)) if vals else float('nan')
 
-    # Heatmap EM vs (n,L)
     plt.figure(figsize=(10, 5))
     im = plt.imshow(mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
     plt.colorbar(im, label='EM')
@@ -144,7 +131,6 @@ def plot_explicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'heatmap_explicit_acc_n_by_L.png'))
     plt.close()
 
-    # Line plot: EM vs n for each fixed L
     by_L_then_n = defaultdict(lambda: defaultdict(list))
     for r in rows:
         if r.get('approach') == 'implicit':
@@ -169,7 +155,6 @@ def plot_explicit(rows, outdir: str):
         plt.savefig(os.path.join(outdir, 'lines_explicit_acc_vs_n_by_L.png'))
         plt.close()
 
-    # Lift-over-chance overlay (explicit): lift = (EM - 1/k_last) / (1 - 1/k_last)
     by_L_then_n_lift = defaultdict(lambda: defaultdict(list))
     for r in rows:
         if r.get('approach') == 'implicit':
@@ -204,7 +189,105 @@ def plot_explicit(rows, outdir: str):
         plt.savefig(os.path.join(outdir, 'lines_explicit_lift_vs_n_by_L.png'))
         plt.close()
 
-    # (Omitted) Redundant line plot (EM vs L by n)
+    try:
+        import importlib
+        analyzer = importlib.import_module('explicit.analyze_errors')
+    except Exception:
+        analyzer = None
+
+    if analyzer is not None:
+        roots = []
+        for r in rows:
+            if r.get('approach') == 'implicit':
+                continue
+            d = r.get('dir')
+            if d:
+                p = Path(d).parent
+                roots.append(str(p))
+        sweep_root = None
+        if roots:
+            from collections import Counter
+            sweep_root = Path(Counter(roots).most_common(1)[0][0])
+
+        by_L_then_n_blocks = defaultdict(lambda: defaultdict(list))
+        if sweep_root and sweep_root.exists():
+            flat_dir = sweep_root / 'flat'
+            for r in rows:
+                if r.get('approach') == 'implicit':
+                    continue
+                try:
+                    n = int(r['n']); L = int(r.get('L') or 0)
+                    tag_dir = Path(r.get('dir',''))
+                    tag = tag_dir.name if tag_dir.name else ''
+                    results_path = flat_dir / f'results_{tag}.jsonl'
+                    if not results_path.exists():
+                        continue
+                    fn_correct = 0; fn1_chain = 0; fn2_chain = 0; total = 0
+                    with results_path.open('r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            rec = __import__('json').loads(line)
+                            a = analyzer.analyze_record(rec)
+                            fn_correct += int(bool(a.get('pred_fn_correct')))
+                            fn1_chain += int(bool(a.get('pred_fn1_from_chain')))
+                            fn2_chain += int(bool(a.get('pred_fn2_from_chain')))
+                            total += 1
+                    if total > 0:
+                        by_L_then_n_blocks[L][n].append((fn_correct/total, fn1_chain/total, fn2_chain/total))
+                except Exception:
+                    continue
+
+        if by_L_then_n_blocks:
+            for L in sorted(by_L_then_n_blocks.keys()):
+                ns = sorted(by_L_then_n_blocks[L].keys())
+                em_means = []
+                fn_means = []
+                fn1_means = []
+                fn2_means = []
+                em_by_n = defaultdict(list)
+                for r in rows:
+                    if r.get('approach') == 'implicit':
+                        continue
+                    try:
+                        n = int(r['n']); LL = int(r.get('L') or 0)
+                        if LL != L: continue
+                        em_by_n[n].append(float(r['acc']))
+                    except Exception:
+                        continue
+                for n in ns:
+                    vals = by_L_then_n_blocks[L][n]
+                    if not vals:
+                        continue
+                    fn_avg = sum(v[0] for v in vals)/len(vals)
+                    fn1_avg = sum(v[1] for v in vals)/len(vals)
+                    fn2_avg = sum(v[2] for v in vals)/len(vals)
+                    em_avg = (sum(em_by_n[n])/len(em_by_n[n])) if em_by_n.get(n) else 0.0
+                    em_means.append(em_avg)
+                    fn_means.append(fn_avg)
+                    fn1_means.append(fn1_avg)
+                    fn2_means.append(fn2_avg)
+
+                import numpy as np
+                x = np.arange(len(ns))
+                width = 0.2
+
+                plt.figure(figsize=(12, 5))
+                plt.bar(x - 1.5*width, em_means, width, label='EM')
+                plt.bar(x - 0.5*width, fn_means, width, label='f_n correct')
+                plt.bar(x + 0.5*width, fn1_means, width, label='f_{n-1} coherent')
+                plt.bar(x + 1.5*width, fn2_means, width, label='f_{n-2} from-chain')
+                plt.xticks(x, ns)
+                plt.yticks([i/10 for i in range(0,11)])
+                plt.ylim(0,1)
+                plt.xlabel('n (hops)')
+                plt.ylabel('Rate')
+                plt.title(f'Explicit (L={L}): EM and per-block correctness by n')
+                plt.legend()
+                plt.tight_layout()
+                plt.savefig(os.path.join(outdir, f'bars_explicit_per_block_vs_n_L{L}.png'))
+                plt.close()
 
 
 def main():
@@ -219,7 +302,6 @@ def main():
 
     approach = args.approach
     if approach == 'auto':
-        # Infer from first row
         a = next((r.get('approach') for r in rows if r.get('approach')), 'explicit')
         approach = a
 
@@ -228,7 +310,6 @@ def main():
     elif approach == 'explicit':
         plot_explicit(rows, args.outdir)
     else:
-        # Try both when auto
         plot_implicit(rows, args.outdir)
         plot_explicit(rows, args.outdir)
 
@@ -237,5 +318,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 

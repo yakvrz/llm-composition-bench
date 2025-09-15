@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Experiment helper CLI: run sweeps from JSON configs, plot results, and append brief reports.
+Experiment helper CLI: run sweeps from JSON configs, plot results, and write per-run results.md.
 
 Commands:
-  - run   --config CONFIG.json              → runs sweep.py per config, records in runs/index.csv
-  - plot  --summary SUMMARY.csv --approach  → generates plots into plots/<tag>/
-  - report --summary SUMMARY.csv --approach → appends a short markdown section to REPORTS.md
+  - run   --config CONFIG.json              → runs scripts/sweep.py per config, plots to run root, indexes runs/index.csv
+  - plot  --summary SUMMARY.csv --approach  → generates plots into <run_root>/plots/
+  - report --summary SUMMARY.csv --approach → writes a short markdown results.md into the run root
 
 Config (JSON) examples (implicit/explicit): see configs/.
 """
-import argparse, json, os, subprocess, sys, datetime as dt
+import argparse, json, subprocess, sys, datetime as dt
 from pathlib import Path
 
 
@@ -18,8 +18,23 @@ def ensure_dir(p: Path):
 
 
 def run_cmd(cmd: list[str]) -> tuple[int, str]:
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    return res.returncode, res.stdout
+    print(f"[exp] RUN: {' '.join(cmd)}", flush=True)
+    # Stream output line-by-line while capturing for later parsing
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    lines: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(line, end='')
+            lines.append(line)
+        proc.wait()
+        return (proc.returncode or 0), ''.join(lines)
+    finally:
+        if proc.stdout is not None:
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
 
 
 def parse_summary_path(stdout: str) -> Path | None:
@@ -33,7 +48,7 @@ def parse_summary_path(stdout: str) -> Path | None:
 
 
 def infer_tag_from_summary(summary: Path) -> str:
-    # runs/sweep_YYYYMMDD_HHMMSS/summary.csv → sweep_YYYYMMDD_HHMMSS
+    # runs/<approach>/sweep_YYYYMMDD_HHMMSS/summary.csv → sweep_YYYYMMDD_HHMMSS
     return summary.parent.name
 
 
@@ -66,7 +81,7 @@ def cmd_run(args):
     cfg = json.loads(Path(cfg_path).read_text(encoding='utf-8'))
     approach = cfg.get('approach', 'explicit')
     # Build sweep command
-    cmd = [sys.executable, 'sweep.py', '--approach', approach]
+    cmd = [sys.executable, 'scripts/sweep.py', '--approach', approach]
     def add_list(flag: str, values):
         if values is None: return
         if isinstance(values, list):
@@ -94,10 +109,7 @@ def cmd_run(args):
         if cfg.get('ablate_hop') is not None: cmd.extend(['--ablate_hop', str(cfg['ablate_hop'])])
     else:
         if cfg.get('path_collision_stress'): cmd.append('--path_collision_stress')
-    # Flatten outputs for cleanliness
-    cmd.append('--flat_outputs')
     rc, out = run_cmd(cmd)
-    print(out, end='')
     if rc != 0:
         print('Sweep failed.', file=sys.stderr)
         sys.exit(rc)
@@ -105,11 +117,10 @@ def cmd_run(args):
     if not summary or not summary.exists():
         print('Could not locate summary.csv in output.', file=sys.stderr)
         sys.exit(2)
-    # Plot
-    plots_dir = Path('plots') / approach / infer_tag_from_summary(summary)
+    # Plot into run root plots/
+    plots_dir = summary.parent / 'plots'
     ensure_dir(plots_dir)
-    rc2, out2 = run_cmd([sys.executable, 'plot_sweep.py', '--summary', str(summary), '--approach', approach, '--outdir', str(plots_dir)])
-    print(out2, end='')
+    rc2, out2 = run_cmd([sys.executable, 'scripts/plot_sweep.py', '--summary', str(summary), '--approach', approach, '--outdir', str(plots_dir)])
     # Index
     write_index_row(summary, approach, cfg_path, plots_dir, extras={
         'model': cfg.get('model',''),
@@ -154,7 +165,7 @@ def summarize_for_report(summary_path: Path, approach: str) -> str:
 def cmd_plot(args):
     outdir = Path(args.outdir)
     ensure_dir(outdir)
-    rc, out = run_cmd([sys.executable, 'plot_sweep.py', '--summary', args.summary, '--approach', args.approach, '--outdir', str(outdir)])
+    rc, out = run_cmd([sys.executable, 'scripts/plot_sweep.py', '--summary', args.summary, '--approach', args.approach, '--outdir', str(outdir)])
     print(out, end='')
 
 
@@ -162,7 +173,8 @@ def cmd_report(args):
     summary = Path(args.summary)
     approach = args.approach
     tag = infer_tag_from_summary(summary)
-    plots_dir = Path('plots') / approach / tag
+    run_root = summary.parent
+    plots_dir = run_root / 'plots'
     section = [
         f"### {tag} ({approach})",
         f"- Summary: `{summary.as_posix()}`",
@@ -170,8 +182,8 @@ def cmd_report(args):
         summarize_for_report(summary, approach),
         "",
     ]
-    Path('REPORTS.md').open('a', encoding='utf-8').write('\n'.join(section) + '\n')
-    print(f"Appended report section for {tag} → REPORTS.md")
+    (run_root / 'results.md').open('w', encoding='utf-8').write('\n'.join(section) + '\n')
+    print(f"Wrote results.md for {tag} → {run_root/'results.md'}")
 
 
 def main():
@@ -198,5 +210,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 

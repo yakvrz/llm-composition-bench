@@ -16,40 +16,14 @@ Hygiene:
 """
 import argparse, json, random, time
 from typing import Dict, List, Tuple
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.synth import build_bijections, compose_chain
 
 
 def layer_prefix(i: int) -> str:
     return chr(ord('A') + i)
-
-
-def make_layer(prefix: str, size: int) -> List[str]:
-    return [f"{prefix}_{j:04d}" for j in range(size)]
-
-
-def permute_map(src: List[str], dst: List[str]) -> Dict[str, str]:
-    shuffled = dst[:]
-    random.shuffle(shuffled)
-    return dict(zip(src, shuffled))
-
-
-def build_bijections(hops: int, size_M: int, seed: int) -> Tuple[List[List[str]], List[Dict[str, str]]]:
-    random.seed(seed)
-    layers: List[List[str]] = [make_layer(layer_prefix(i), size_M) for i in range(hops + 1)]
-    functions: List[Dict[str, str]] = []
-    for i in range(1, hops + 1):
-        src = layers[i - 1]
-        dst = layers[i]
-        functions.append(permute_map(src, dst))
-    return layers, functions
-
-
-def compose_chain(x: str, functions: List[Dict[str, str]]) -> Tuple[List[str], str]:
-    intermediates: List[str] = []
-    cur = x
-    for f in functions:
-        cur = f[cur]
-        intermediates.append(cur)
-    return intermediates[:-1], intermediates[-1]
 
 
 def main():
@@ -71,6 +45,12 @@ def main():
     L0 = layers[0]
 
     total = min(args.items, len(L0))
+    print(
+        f"[implicit/generate] Start: items={total}, n={args.hops}, m={args.m}, M={args.M}, seed={args.seed}, "
+        f"ablate_inner={args.ablate_inner}, ablate_hop={args.ablate_hop}\n→ {args.out}",
+        flush=True,
+    )
+    progress_interval = 1 if total <= 50 else 25
     with open(args.out, "w", encoding="utf-8") as f:
         for i in range(total):
             random.seed(args.seed + i)
@@ -150,8 +130,10 @@ def main():
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
             if args.sleep > 0:
                 time.sleep(args.sleep)
+            if ((i + 1) % progress_interval == 0) or ((i + 1) == total):
+                print(f"[implicit/generate] progress: {i+1}/{total}", flush=True)
 
-    print(f"Wrote {total} items to {args.out}")
+    print(f"[implicit/generate] Done. Wrote {total} items to {args.out}", flush=True)
 
 
 if __name__ == "__main__":
