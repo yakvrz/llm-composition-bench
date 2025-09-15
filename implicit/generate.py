@@ -90,7 +90,7 @@ def main():
             # Optional ablation of one inner hop f_j
             if args.ablate_inner:
                 j = int(args.ablate_hop)
-                assert 1 < j < args.hops - 0, "ablate_hop must be an inner hop (2..n-2 or 2..n-1 if desired)"
+                assert 1 < j < args.hops - 1, "ablate_hop must be an inner hop (2..n-2)"
                 facts = [tr for tr in facts if tr[1] != f"f{j}"]
 
             # Balanced counts: exactly m lines per relation except ablated hop

@@ -218,3 +218,11 @@ See plots under `plots/implicit/sweep_20250915_023900/` and `plots/explicit/swee
 - Multi-chain context creates realistic distraction without changing the core reasoning task.
 - Laddered candidates (explicit) and bag-of-facts (implicit) provide complementary stress tests.
 - Symbolic tokens avoid NL artifacts; naturalized surfaces can be layered later if needed.
+
+## Recent updates
+
+- Fixed duplicate serial evaluation path in `implicit/evaluate.py` (removed stray block that double-counted the last item in-memory/console).
+- `scripts/plot_sweep.py` now reads per-tag results from `results/` (falls back to `flat/` if present). This enables per-block explicit bar plots without a custom "flat" mirror.
+- Clarified ablation constraints in `implicit/generate.py`: `--ablate_hop` must be in 2..n−2.
+- Corrected docstring in `scripts/sweep.py` to reference `scripts/plot_sweep.py`.
+- Corrected `contexts` values for L=4 rows in `runs/explicit/sweep_20250915_132329/summary.csv` (8 instead of 26).

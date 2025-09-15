@@ -211,6 +211,8 @@ def plot_explicit(rows, outdir: str):
 
         by_L_then_n_blocks = defaultdict(lambda: defaultdict(list))
         if sweep_root and sweep_root.exists():
+            # Prefer results/ where sweep writes outputs; fall back to flat/
+            results_dir = sweep_root / 'results'
             flat_dir = sweep_root / 'flat'
             for r in rows:
                 if r.get('approach') == 'implicit':
@@ -219,7 +221,10 @@ def plot_explicit(rows, outdir: str):
                     n = int(r['n']); L = int(r.get('L') or 0)
                     tag_dir = Path(r.get('dir',''))
                     tag = tag_dir.name if tag_dir.name else ''
-                    results_path = flat_dir / f'results_{tag}.jsonl'
+                    # Try results/ first, else flat/
+                    results_path = results_dir / f'results_{tag}.jsonl'
+                    if not results_path.exists():
+                        results_path = flat_dir / f'results_{tag}.jsonl'
                     if not results_path.exists():
                         continue
                     fn_correct = 0; fn1_chain = 0; fn2_chain = 0; total = 0

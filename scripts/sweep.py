@@ -7,7 +7,7 @@ Writes unified run layout:
   runs/<approach>/sweep_<timestamp>/
     - data/
     - results/
-    - plots/  (populated by scripts/exp.py plot)
+    - plots/  (populated by scripts/plot_sweep.py)
     - summary.csv  (aggregate across combos)
 """
 
