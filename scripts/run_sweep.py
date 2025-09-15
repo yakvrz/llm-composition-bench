@@ -188,20 +188,79 @@ def cmd_report(args):
     tag = infer_tag_from_summary(summary)
     run_root = summary.parent
     plots_dir = run_root / 'plots'
-    label_line = []
-    # attempt to fetch label from a sibling config passed earlier isn't trivial here; accept explicit arg via report
-    # The cmd_report parser now supports --label
-    try:
-        from argparse import Namespace
-        if isinstance(args, Namespace) and getattr(args, 'label', ''):
-            label_line = [f"- Label: `{args.label}`"]
-    except Exception:
-        pass
+    # Load extras (config/label) from runs/index.csv for this summary if available
+    def load_extras_for_summary(s: Path) -> dict | None:
+        index_path = Path('runs') / 'index.csv'
+        if not index_path.exists():
+            return None
+        import csv, json as _json
+        with index_path.open('r', encoding='utf-8') as f:
+            for r in csv.DictReader(f):
+                if r.get('summary_csv') == s.as_posix():
+                    extras_str = r.get('extras') or ''
+                    try:
+                        # undo "," replacement for CSV safety
+                        extras_json = extras_str.replace(';', ',')
+                        return _json.loads(extras_json)
+                    except Exception:
+                        return None
+        return None
+
+    extras = load_extras_for_summary(summary) or {}
+    cfg = extras.get('config') or {}
+
+    # Label line precedence: CLI arg > config label
+    label_val = (getattr(args, 'label', '') or cfg.get('label') or '').strip()
+    label_line = [f"- Label: `{label_val}`"] if label_val else []
+
+    def kv(name: str, value):
+        return f"  - {name}: {value}"
+
+    params_lines: list[str] = ["- Parameters:"]
+    if cfg:
+        if approach == 'explicit':
+            params_lines.extend([
+                kv('approach', cfg.get('approach', 'explicit')),
+                kv('items', cfg.get('items')),
+                kv('hops', cfg.get('hops')),
+                kv('Ls', cfg.get('Ls')),
+                kv('k', cfg.get('k', '')),
+                kv('contexts', cfg.get('contexts')),
+                kv('seeds', cfg.get('seeds')),
+                kv('M', cfg.get('M')),
+                kv('id_width', cfg.get('id_width', 4)),
+                kv('model', cfg.get('model')),
+                kv('temp', cfg.get('temp')),
+                kv('max_output_tokens', cfg.get('max_output_tokens')),
+                kv('order_trials', cfg.get('order_trials', 1)),
+                kv('path_collision_stress', cfg.get('path_collision_stress', False)),
+                kv('block_head_balance', cfg.get('block_head_balance', False)),
+                kv('alias_heads_per_block', cfg.get('alias_heads_per_block', False)),
+                kv('baseline', cfg.get('baseline', '')),
+            ])
+        else:
+            params_lines.extend([
+                kv('approach', cfg.get('approach', 'implicit')),
+                kv('items', cfg.get('items')),
+                kv('hops', cfg.get('hops')),
+                kv('m_list', cfg.get('m_list')),
+                kv('seeds', cfg.get('seeds')),
+                kv('M', cfg.get('M')),
+                kv('id_width', cfg.get('id_width', 4)),
+                kv('model', cfg.get('model')),
+                kv('temp', cfg.get('temp')),
+                kv('max_output_tokens', cfg.get('max_output_tokens')),
+                kv('order_trials', cfg.get('order_trials', 1)),
+                kv('baseline', cfg.get('baseline', '')),
+                kv('ablate_inner', cfg.get('ablate_inner', False)),
+                kv('ablate_hop', cfg.get('ablate_hop', '')),
+            ])
+
     section = [
         f"### {tag} ({approach})",
         f"- Summary: `{summary.as_posix()}`",
         f"- Plots: `{plots_dir.as_posix()}`",
-    ] + label_line + [
+    ] + label_line + params_lines + [
         summarize_for_report(summary, approach),
         "",
     ]
