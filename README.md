@@ -145,6 +145,21 @@ Unified run layout
 
 - Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
 - Concurrency: evaluators support `--concurrency K` with retries (`--max_retries`, `--retry_backoff`) and progressive writes/prints.
+
+## Tests
+
+Smoke tests validate end-to-end generation and evaluation for both approaches. Ensure your `.env` has a valid `OPENAI_API_KEY`.
+
+Run all tests:
+```
+python -m pytest -q tests/
+```
+
+Run a single test:
+```
+python -m pytest -q tests/test_explicit.py
+python -m pytest -q tests/test_implicit.py
+```
 - Pointer baseline (implicit): `--baseline pointer_f_n1` outputs the tail of the first f_{n−1} line; expected ≈1/m.
 - Ablation (implicit): generator flags `--ablate_inner --ablate_hop j` remove one inner hop across all chains to induce ambiguity; EM should approach ≈1/m.
 - Path-collision stress (explicit): generator flag `--path_collision_stress` ensures coherent distractor paths across ladder levels in candidate blocks.
