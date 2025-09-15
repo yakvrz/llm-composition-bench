@@ -102,13 +102,18 @@ def cmd_run(args):
     if 'max_output_tokens' in cfg: cmd.extend(['--max_output_tokens', str(cfg['max_output_tokens'])])
     # Extras
     if 'order_trials' in cfg: cmd.extend(['--order_trials', str(cfg['order_trials'])])
+    if 'baseline' in cfg and cfg.get('baseline'): cmd.extend(['--baseline', str(cfg['baseline'])])
     if approach == 'implicit':
         add_list('--m_list', cfg.get('m_list'))
         if cfg.get('baseline'): cmd.extend(['--baseline', cfg['baseline']])
         if cfg.get('ablate_inner'): cmd.append('--ablate_inner')
         if cfg.get('ablate_hop') is not None: cmd.extend(['--ablate_hop', str(cfg['ablate_hop'])])
+        if 'id_width' in cfg: cmd.extend(['--id_width', str(cfg['id_width'])])
     else:
         if cfg.get('path_collision_stress'): cmd.append('--path_collision_stress')
+        if cfg.get('block_head_balance'): cmd.append('--block_head_balance')
+        if cfg.get('alias_heads_per_block'): cmd.append('--alias_heads_per_block')
+        if 'id_width' in cfg: cmd.extend(['--id_width', str(cfg['id_width'])])
     rc, out = run_cmd(cmd)
     if rc != 0:
         print('Sweep failed.', file=sys.stderr)
@@ -120,7 +125,12 @@ def cmd_run(args):
     # Plot into run root plots/
     plots_dir = summary.parent / 'plots'
     ensure_dir(plots_dir)
-    rc2, out2 = run_cmd([sys.executable, 'scripts/plot_sweep.py', '--summary', str(summary), '--approach', approach, '--outdir', str(plots_dir)])
+    # Include label in plots when present in config
+    label = cfg.get('label') or ''
+    plot_cmd = [sys.executable, 'scripts/plot_sweep.py', '--summary', str(summary), '--approach', approach, '--outdir', str(plots_dir)]
+    if label:
+        plot_cmd += ['--label', str(label)]
+    rc2, out2 = run_cmd(plot_cmd)
     # Index
     write_index_row(summary, approach, cfg_path, plots_dir, extras={
         'model': cfg.get('model',''),
@@ -165,7 +175,10 @@ def summarize_for_report(summary_path: Path, approach: str) -> str:
 def cmd_plot(args):
     outdir = Path(args.outdir)
     ensure_dir(outdir)
-    rc, out = run_cmd([sys.executable, 'scripts/plot_sweep.py', '--summary', args.summary, '--approach', args.approach, '--outdir', str(outdir)])
+    plot_cmd = [sys.executable, 'scripts/plot_sweep.py', '--summary', args.summary, '--approach', args.approach, '--outdir', str(outdir)]
+    if getattr(args, 'label', ''):
+        plot_cmd += ['--label', args.label]
+    rc, out = run_cmd(plot_cmd)
     print(out, end='')
 
 
@@ -175,10 +188,20 @@ def cmd_report(args):
     tag = infer_tag_from_summary(summary)
     run_root = summary.parent
     plots_dir = run_root / 'plots'
+    label_line = []
+    # attempt to fetch label from a sibling config passed earlier isn't trivial here; accept explicit arg via report
+    # The cmd_report parser now supports --label
+    try:
+        from argparse import Namespace
+        if isinstance(args, Namespace) and getattr(args, 'label', ''):
+            label_line = [f"- Label: `{args.label}`"]
+    except Exception:
+        pass
     section = [
         f"### {tag} ({approach})",
         f"- Summary: `{summary.as_posix()}`",
         f"- Plots: `{plots_dir.as_posix()}`",
+    ] + label_line + [
         summarize_for_report(summary, approach),
         "",
     ]
@@ -197,11 +220,13 @@ def main():
     ap_plot.add_argument('--summary', required=True)
     ap_plot.add_argument('--approach', default='auto', choices=['explicit','implicit','auto'])
     ap_plot.add_argument('--outdir', required=True)
+    ap_plot.add_argument('--label', default='')
     ap_plot.set_defaults(func=cmd_plot)
 
     ap_report = sp.add_parser('report')
     ap_report.add_argument('--summary', required=True)
     ap_report.add_argument('--approach', required=True, choices=['explicit','implicit'])
+    ap_report.add_argument('--label', default='')
     ap_report.set_defaults(func=cmd_report)
 
     args = ap.parse_args()

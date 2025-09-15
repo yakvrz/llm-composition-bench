@@ -58,43 +58,31 @@ def plot_implicit(rows, outdir: str):
     plt.savefig(os.path.join(outdir, 'heatmap_acc_n_by_m.png'))
     plt.close()
 
-    plt.figure(figsize=(10, 5))
-    for n in ns:
-        ys = []
-        for m in ms:
-            vals = by_nm.get((n, m), [])
-            ys.append((sum(vals) / len(vals)) if vals else float('nan'))
-        plt.plot(ms, ys, marker='o', label=f'n={n}')
-    plt.xlabel('m (chains)')
-    plt.ylabel('EM')
-    plt.ylim(0, 1)
-    plt.title('Implicit: EM vs m by n (mean across seeds)')
-    plt.legend(ncol=min(3, len(ns)))
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, 'lines_acc_vs_m_by_n.png'))
-    plt.close()
+    # Remove line plots for simplicity per objectives
 
-    plt.figure(figsize=(10, 5))
-    for n in ns:
-        ys = []
-        for m in ms:
+    # Remove line plots; add lift heatmap
+    import numpy as np
+    lift_mat = np.zeros((len(ns), len(ms)))
+    for i, n in enumerate(ns):
+        for j, m in enumerate(ms):
             vals = by_nm.get((n, m), [])
             em = (sum(vals) / len(vals)) if vals else float('nan')
             chance = 0.0 if m <= 1 else 1.0 / m
-            lift = (em - chance) / (1.0 - chance) if em == em and (1.0 - chance) > 0 else float('nan')
-            ys.append(lift)
-        plt.plot(ms, ys, marker='o', label=f'n={n}')
+            lift_mat[i, j] = (em - chance) / (1.0 - chance) if em == em and (1.0 - chance) > 0 else float('nan')
+    plt.figure(figsize=(10, 5))
+    im = plt.imshow(lift_mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
+    plt.colorbar(im, label='Lift over chance')
+    plt.xticks(range(len(ms)), ms)
+    plt.yticks(range(len(ns)), ns)
     plt.xlabel('m (chains)')
-    plt.ylabel('Lift over chance')
-    plt.ylim(0, 1)
-    plt.title('Implicit: Lift-over-chance vs m by n')
-    plt.legend(ncol=min(3, len(ns)))
+    plt.ylabel('n (hops)')
+    plt.title('Implicit: Lift-over-chance heatmap (mean across seeds)')
     plt.tight_layout()
-    plt.savefig(os.path.join(outdir, 'lines_lift_vs_m_by_n.png'))
+    plt.savefig(os.path.join(outdir, 'heatmap_lift_n_by_m.png'))
     plt.close()
 
 
-def plot_explicit(rows, outdir: str):
+def plot_explicit(rows, outdir: str, regime_label: str | None = None):
     by_nL = defaultdict(list)
     for r in rows:
         if r.get('approach') == 'implicit':
@@ -126,7 +114,10 @@ def plot_explicit(rows, outdir: str):
     plt.yticks(range(len(ns)), ns)
     plt.xlabel('L (decision depth)')
     plt.ylabel('n (hops)')
-    plt.title('Explicit: EM heatmap (mean across seeds)')
+    title = 'Explicit: EM heatmap (mean across seeds)'
+    if regime_label:
+        title += f" [{regime_label}]"
+    plt.title(title)
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, 'heatmap_explicit_acc_n_by_L.png'))
     plt.close()
@@ -140,20 +131,7 @@ def plot_explicit(rows, outdir: str):
         except Exception:
             continue
         by_L_then_n[L][n].append(acc)
-    if by_L_then_n:
-        plt.figure(figsize=(10, 5))
-        for L in sorted(by_L_then_n.keys()):
-            xs = sorted(by_L_then_n[L].keys())
-            ys = [sum(by_L_then_n[L][n]) / len(by_L_then_n[L][n]) for n in xs]
-            plt.plot(xs, ys, marker='o', label=f'L={L}')
-        plt.xlabel('n (hops)')
-        plt.ylabel('EM')
-        plt.ylim(0, 1)
-        plt.title('Explicit: EM vs n by L (mean across seeds)')
-        plt.legend(ncol=min(3, len(by_L_then_n)))
-        plt.tight_layout()
-        plt.savefig(os.path.join(outdir, 'lines_explicit_acc_vs_n_by_L.png'))
-        plt.close()
+    # Remove line plots per objectives
 
     by_L_then_n_lift = defaultdict(lambda: defaultdict(list))
     for r in rows:
@@ -174,20 +152,42 @@ def plot_explicit(rows, outdir: str):
             by_L_then_n_lift[L][n].append(lift)
         except Exception:
             pass
-    if by_L_then_n_lift:
-        plt.figure(figsize=(10, 5))
-        for L in sorted(by_L_then_n_lift.keys()):
-            xs = sorted(by_L_then_n_lift[L].keys())
-            ys = [sum(by_L_then_n_lift[L][n]) / len(by_L_then_n_lift[L][n]) for n in xs]
-            plt.plot(xs, ys, marker='o', label=f'L={L}')
-        plt.xlabel('n (hops)')
-        plt.ylabel('Lift over chance')
-        plt.ylim(0, 1)
-        plt.title('Explicit: Lift-over-chance vs n by L')
-        plt.legend(ncol=min(3, len(by_L_then_n_lift)))
-        plt.tight_layout()
-        plt.savefig(os.path.join(outdir, 'lines_explicit_lift_vs_n_by_L.png'))
-        plt.close()
+    # Add lift heatmap for explicit
+    import numpy as np
+    lift_mat = np.zeros((len(ns), len(Ls)))
+    for i, n in enumerate(ns):
+        for j, L in enumerate(Ls):
+            vals = by_nL.get((n, L), [])
+            em = (sum(vals) / len(vals)) if vals else float('nan')
+            # estimate chance from last k or k2 (when provided) per rows
+            k_last = None
+            for r in rows:
+                try:
+                    if int(r['n'])==n and int(r.get('L') or 0)==L:
+                        if r.get('k'):
+                            k_last = int(r['k'])
+                            break
+                        ks = [int(r[x]) for x in ('k0','k1','k2') if r.get(x)]
+                        k_last = ks[-1] if ks else None
+                        break
+                except Exception:
+                    continue
+            chance = 0.0 if not k_last or k_last<=1 else 1.0/ k_last
+            lift_mat[i, j] = (em - chance) / (1.0 - chance) if em == em and (1.0 - chance) > 0 else float('nan')
+    plt.figure(figsize=(10, 5))
+    im2 = plt.imshow(lift_mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
+    plt.colorbar(im2, label='Lift over chance')
+    plt.xticks(range(len(Ls)), Ls)
+    plt.yticks(range(len(ns)), ns)
+    title = 'Explicit: Lift-over-chance heatmap (mean across seeds)'
+    if regime_label:
+        title += f" [{regime_label}]"
+    plt.title(title)
+    plt.xlabel('L (decision depth)')
+    plt.ylabel('n (hops)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, 'heatmap_explicit_lift_n_by_L.png'))
+    plt.close()
 
     try:
         import importlib
@@ -288,7 +288,8 @@ def plot_explicit(rows, outdir: str):
                 plt.ylim(0,1)
                 plt.xlabel('n (hops)')
                 plt.ylabel('Rate')
-                plt.title(f'Explicit (L={L}): EM and per-block correctness by n')
+                reg = f" [{regime_label}]" if regime_label else ""
+                plt.title(f'Explicit (L={L}): EM and per-block correctness by n{reg}')
                 plt.legend()
                 plt.tight_layout()
                 plt.savefig(os.path.join(outdir, f'bars_explicit_per_block_vs_n_L{L}.png'))
@@ -299,6 +300,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--summary', required=True, help='Path to sweep summary.csv')
     ap.add_argument('--approach', choices=['explicit', 'implicit', 'auto'], default='auto')
+    ap.add_argument('--label', default='', help='Regime label to include in titles (e.g., explicit-easy, explicit-hard)')
     ap.add_argument('--outdir', required=True, help='Output directory for plots')
     args = ap.parse_args()
 
@@ -313,10 +315,10 @@ def main():
     if approach == 'implicit':
         plot_implicit(rows, args.outdir)
     elif approach == 'explicit':
-        plot_explicit(rows, args.outdir)
+        plot_explicit(rows, args.outdir, regime_label=(args.label or None))
     else:
         plot_implicit(rows, args.outdir)
-        plot_explicit(rows, args.outdir)
+        plot_explicit(rows, args.outdir, regime_label=(args.label or None))
 
     print(f"Plots written to: {args.outdir}")
 

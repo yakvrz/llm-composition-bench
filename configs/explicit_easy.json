@@ -1,0 +1,20 @@
+{
+  "approach": "explicit",
+  "items": 120,
+  "hops": [4, 6, 8],
+  "Ls": [2, 3],
+  "k": 6,
+  "contexts": [8],
+  "seeds": [7, 13, 23],
+  "M": 256,
+  "model": "gpt-4.1-mini",
+  "temp": 0.0,
+  "max_output_tokens": 16,
+  "order_trials": 1,
+  "label": "explicit-easy",
+  "path_collision_stress": false,
+  "block_head_balance": false,
+  "alias_heads_per_block": false,
+  "id_width": 3
+}
+

@@ -88,6 +88,7 @@ def main():
     ap.add_argument("--save_raw_output", action="store_true")
     ap.add_argument("--log_first", type=int, default=0)
     ap.add_argument("--order_trials", type=int, default=1, help="number of shuffle trials per item (facts and candidate blocks)")
+    ap.add_argument("--baseline", type=str, default="", choices=["", "first_rank_head"], help="run a baseline instead of calling the model")
     ap.add_argument("--concurrency", type=int, default=4, help="number of parallel API calls")
     ap.add_argument("--max_retries", type=int, default=3, help="max retries on API errors")
     ap.add_argument("--retry_backoff", type=float, default=1.0, help="initial backoff seconds for retries")
@@ -142,26 +143,37 @@ def main():
                     vv = list(v)
                     _rnd.shuffle(vv)
                     trial_item[k] = vv
-            prompt = build_prompt(trial_item)
-            resp, err = call_model_with_retries(prompt)
-            if resp is not None:
-                raw_text = (resp.output_text or "").strip()
-                pred_local = next((ln.strip() for ln in raw_text.splitlines() if ln.strip()), raw_text)
-                err_local = None
-                last_prompt_local = prompt
-                last_raw_local = raw_text
-                if not printed_api_ok:
-                    with lock:
-                        if not printed_api_ok:
-                            print(f"[explicit/eval] API OK model={args.model}", flush=True)
-                            printed_api_ok = True
+            if args.baseline == "first_rank_head":
+                # pick the tail of the first candidate in f_n block
+                key = f"candidates_f{n_local}"
+                triples = trial_item.get(key) or []
+                if triples:
+                    pred_local = triples[0][2]
+                    err_local = None
+                    last_prompt_local = ""; last_raw_local = ""
+                else:
+                    pred_local = ""; err_local = "missing candidates_f{n_local}"
             else:
-                pred_local = ""; last_raw_local = ""; err_local = err or ""
-                with lock:
-                    print(f"[explicit/eval] API ERROR item={item.get('id')} err={err_local}", flush=True)
+                prompt = build_prompt(trial_item)
+                resp, err = call_model_with_retries(prompt)
+                if resp is not None:
+                    raw_text = (resp.output_text or "").strip()
+                    pred_local = next((ln.strip() for ln in raw_text.splitlines() if ln.strip()), raw_text)
+                    err_local = None
+                    last_prompt_local = prompt
+                    last_raw_local = raw_text
+                    if not printed_api_ok:
+                        with lock:
+                            if not printed_api_ok:
+                                print(f"[explicit/eval] API OK model={args.model}", flush=True)
+                                printed_api_ok = True
+                else:
+                    pred_local = ""; last_raw_local = ""; err_local = err or ""
+                    with lock:
+                        print(f"[explicit/eval] API ERROR item={item.get('id')} err={err_local}", flush=True)
             trial_ems_local.append(int(exact_match(pred_local, aliases_local)))
         is_em_local = sum(trial_ems_local) / len(trial_ems_local) >= 0.5
-        rec_local = {"id": item.get("id"), "n": n_local, "question": item.get("question"), "gold": aliases_local, "pred": pred_local, "em": is_em_local, "error": err_local, "facts_chain": item.get("facts_chain")}
+        rec_local = {"id": item.get("id"), "n": n_local, "question": item.get("question"), "gold": aliases_local, "pred": pred_local, "em": is_em_local, "error": err_local, "facts_chain": item.get("facts_chain"), "baseline": (args.baseline or None)}
         for k, v in item.items():
             if isinstance(k, str) and k.startswith("candidates_f"):
                 rec_local[k] = v

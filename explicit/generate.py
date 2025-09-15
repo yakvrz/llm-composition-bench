@@ -33,6 +33,7 @@ def main():
     ap.add_argument("--L", type=int, default=3, help="decision depth: number of final functions with candidate sets (1..n)")
     ap.add_argument("--context_chains", type=int, default=6, help="number of distractor chains to mix into facts")
     ap.add_argument("--M", type=int, default=512, help="layer size (tokens per layer)")
+    ap.add_argument("--id_width", type=int, default=4, help="zero-padded width for token IDs (shorten to match token budgets)")
     ap.add_argument("--out", type=str, default="data/synth.jsonl", help="output JSONL path")
     ap.add_argument("--seed", type=int, default=7, help="random seed")
     ap.add_argument("--sleep", type=float, default=0.0, help="seconds to sleep between items")
@@ -43,7 +44,7 @@ def main():
     ap.add_argument("--alias_token_prefix", type=str, default="H", help="prefix for block-local aliases (default: H)")
     args = ap.parse_args()
 
-    layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
+    layers, functions = build_bijections(args.hops, args.M, seed=args.seed, id_width=int(args.id_width))
     L0 = layers[0]
     L_eff = max(1, min(args.L, args.hops))
 

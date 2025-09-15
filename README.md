@@ -126,13 +126,14 @@ For convenience, use `scripts/run_sweep.py` to orchestrate sweeps, plots, and a 
 ```bash
 # Run a sweep from a JSON config, auto-plot, and index the run
 python scripts/run_sweep.py run --config configs/implicit_small.json
-python scripts/run_sweep.py run --config configs/explicit_small.json
+python scripts/run_sweep.py run --config configs/explicit_easy.json
+python scripts/run_sweep.py run --config configs/explicit_hard.json
 
-# Generate plots for an existing summary
-python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots
+# Generate plots for an existing summary (heatmaps only; titles include label when provided)
+python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots --label implicit
 
-# Append a short section to REPORTS.md for a run
-python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit
+# Append a short section to results.md for a run (includes label if provided)
+python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --label implicit
 ```
 
 Unified run layout
@@ -143,10 +144,23 @@ Unified run layout
   - `summary.csv` (aggregate across combos)
   - `results.md` (short per-run report)
 
-## Diagnostics and baselines
+## Diagnostics, regimes, and baselines
 
-- Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
-- Concurrency: evaluators support `--concurrency K` with retries (`--max_retries`, `--retry_backoff`) and progressive writes/prints. Use `--log_every` to throttle per-item logging.
+Order invariance: evaluators accept `--order_trials T` to reshuffle facts (and candidate blocks for explicit) T times per item and aggregate EM.
+Concurrency: evaluators support `--concurrency K` with retries (`--max_retries`, `--retry_backoff`) and progressive writes/prints. Use `--log_every` to throttle per-item logging.
+
+Regimes for explicit:
+- explicit-easy: no alias, no path-collision, no head balancing — demonstrates shortcut behavior and constraint bonuses.
+- explicit-hard: alias + path-collision stress + head balancing — decision-depth stress.
+Use `configs/explicit_easy.json` and `configs/explicit_hard.json`.
+
+Token budgets: use `--id_width` (default 4; e.g., 3) to shorten token IDs and better match total prompt tokens across different L. For L comparisons, cap context or shorten IDs so total tokens per item are similar. Expect L=3 > L=2 to persist without aliasing (constraint bonus); with aliasing, the gap should reduce or flip (L=3 ≤ L=2).
+
+Baselines:
+- Implicit: pointer baseline (`--baseline pointer_f_n1`) with chance 1/m. Heatmaps include lift-over-chance.
+- Explicit: first-rank head baseline (`--baseline first_rank_head`) for explicit-easy; chance line 1/k. Heatmaps include lift-over-chance.
+
+Plots: we provide heatmaps only (EM and lift-over-chance). Per-block correctness bars (explicit) include EM, f_n correct, f_{n-1} coherent, f_{n-2} from-chain; in explicit-easy, the first ladder block often appears near-trivial.
 
 ### One-off diagnostics
 

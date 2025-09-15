@@ -75,6 +75,7 @@ def main():
     ap.add_argument('--contexts', type=str, default='8')
     ap.add_argument('--m_list', type=str, default='6', help='implicit only: list of m (number of chains) values')
     ap.add_argument('--M', type=int, default=512)
+    ap.add_argument('--id_width', type=int, default=4)
     ap.add_argument('--seeds', type=str, default='7')
     ap.add_argument('--model', type=str, default='gpt-4.1-mini')
     ap.add_argument('--temp', type=float, default=0.0)
@@ -144,7 +145,7 @@ def main():
             else:
                 gen_cmd += ['--k0', str(k0), '--k1', str(k1), '--k2', str(k2)]
             gen_cmd += [
-                '--context_chains', str(ctx), '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
+                '--context_chains', str(ctx), '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
             ]
             if args.path_collision_stress:
                 gen_cmd += ['--path_collision_stress']
@@ -156,7 +157,7 @@ def main():
             gen_cmd = [
                 sys.executable, 'implicit/generate.py',
                 '--items', str(args.items), '--hops', str(n), '--m', str(mval),
-                '--M', str(args.M), '--seed', str(seed), '--out', str(ds_path),
+                '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
             ]
             if args.ablate_inner:
                 gen_cmd += ['--ablate_inner', '--ablate_hop', str(args.ablate_hop)]
@@ -173,6 +174,9 @@ def main():
                 '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
                 '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
             ]
+            # allow optional explicit baseline
+            if args.baseline:
+                eval_cmd += ['--baseline', args.baseline]
         else:
             eval_cmd = [
                 sys.executable, 'implicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),

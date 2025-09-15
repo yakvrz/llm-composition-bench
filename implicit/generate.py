@@ -32,6 +32,7 @@ def main():
     ap.add_argument("--hops", type=int, default=4)
     ap.add_argument("--m", type=int, default=6, help="number of chains to include in the bag (>=4)")
     ap.add_argument("--M", type=int, default=512)
+    ap.add_argument("--id_width", type=int, default=4, help="zero-padded width for token IDs (shorten to match token budgets)")
     ap.add_argument("--out", type=str, default="data/implicit.jsonl")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--sleep", type=float, default=0.0)
@@ -41,7 +42,7 @@ def main():
 
     assert args.m >= 4, "m must be >= 4"
 
-    layers, functions = build_bijections(args.hops, args.M, seed=args.seed)
+    layers, functions = build_bijections(args.hops, args.M, seed=args.seed, id_width=int(args.id_width))
     L0 = layers[0]
 
     total = min(args.items, len(L0))
