@@ -119,18 +119,18 @@ python sweep.py --approach implicit --items 24 --hops 4,5,6,7,8 --m_list 4,8,12,
 
 ## Experiment runner
 
-For convenience, use `scripts/exp.py` to orchestrate sweeps, plots, and a run index (and per-run results.md):
+For convenience, use `scripts/run_sweep.py` to orchestrate sweeps, plots, and a run index (and per-run results.md):
 
 ```bash
 # Run a sweep from a JSON config, auto-plot, and index the run
-python scripts/exp.py run --config configs/implicit_small.json
-python scripts/exp.py run --config configs/explicit_small.json
+python scripts/run_sweep.py run --config configs/implicit_small.json
+python scripts/run_sweep.py run --config configs/explicit_small.json
 
 # Generate plots for an existing summary
-python scripts/exp.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots
+python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots
 
 # Append a short section to REPORTS.md for a run
-python scripts/exp.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit
+python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit
 ```
 
 Unified run layout
