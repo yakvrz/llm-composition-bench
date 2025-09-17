@@ -162,7 +162,7 @@ Baselines:
 - Explicit: first-rank head baseline (`--baseline first_rank_head`) for explicit-easy; chance line 1/k.
 
 Plots:
-- Implicit: default figure is Lift vs n (one line per m); heatmaps removed.
+- Implicit: default figures are Lift vs n and Accuracy vs n (both one line per m). Heatmaps removed.
 - Explicit: heatmaps (EM and lift-over-chance). Per-block correctness bars include EM, f_n correct, f_{n-1} coherent, f_{n-2} from-chain.
 
 ### One-off diagnostics

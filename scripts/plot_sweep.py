@@ -63,6 +63,38 @@ def plot_implicit(rows, outdir: str, regime_label: str | None = None):
     plt.savefig(os.path.join(outdir, 'lines_lift_vs_n_by_m.png'))
     plt.close()
 
+    # New: Accuracy vs n (one line per m)
+    acc_by_m_then_n = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        if r.get('approach') != 'implicit':
+            continue
+        try:
+            n = int(r['n']); m = int(r['m']); acc = float(r['acc'])
+            acc_by_m_then_n[m][n].append(acc)
+        except Exception:
+            continue
+    if acc_by_m_then_n:
+        plt.figure(figsize=(10,5))
+        for m in sorted(acc_by_m_then_n.keys()):
+            ys = []
+            for n in ns_sorted:
+                vals = acc_by_m_then_n[m].get(n, [])
+                ys.append((sum(vals)/len(vals)) if vals else np.nan)
+            plt.plot(ns_sorted, ys, marker='o', label=f'm={m}')
+        plt.ylim(0, 1.05)
+        plt.yticks([i/10 for i in range(0, 11)])
+        plt.xlabel('n (hops)')
+        plt.ylabel('Accuracy (EM)')
+        title = 'Implicit: Accuracy vs n (by m)'
+        if regime_label:
+            title += f" [{regime_label}]"
+        plt.title(title)
+        plt.grid(True, linestyle='--', alpha=0.3)
+        plt.legend(title='m', loc='best')
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, 'lines_acc_vs_n_by_m.png'))
+        plt.close()
+
     # New: Lift vs n line plot (one line per m). Useful when m is fixed.
     # Compute mean lift per (n, m)
     lift_by_m_then_n = defaultdict(lambda: defaultdict(list))
