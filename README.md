@@ -163,7 +163,6 @@ Baselines:
 
 Plots:
 - Implicit: default figures are Lift vs n and Accuracy vs n (both one line per m). Heatmaps removed.
-- Both implicit plots share identical y-axis formatting; lift includes padding to display negative values when present.
 - Explicit: heatmaps (EM and lift-over-chance). Per-block correctness bars include EM, f_n correct, f_{n-1} coherent, f_{n-2} from-chain.
 
 ### One-off diagnostics
