@@ -11,6 +11,7 @@
 - `implicit/` — bag-of-facts approach (no candidates; m chains mixed)
   - `implicit/generate.py` — generator emitting m chains’ first n−1 hops (balanced per relation)
   - `implicit/evaluate.py` — evaluator asking for y_{n−1} from the bag
+  - `implicit/analyze_errors.py` — error analysis for implicit results (categorizes non-EM errors)
 - `scripts/sweep.py` — sweep utility (`runs/<approach>/<tag>/` layout: data/, results/, plots/, summary.csv)
 - `scripts/run_sweep.py` — orchestrates sweep from JSON, plots, indexes runs/index.csv, and writes per-run results.md
 - `scripts/run_diagnostics.py` — run a single param combo with diagnostics variants; writes one consolidated diagnostics folder with variant plots and results
@@ -121,7 +122,7 @@ python sweep.py --approach implicit --items 24 --hops 4,5,6,7,8 --m_list 4,8,12,
 
 ## Experiment runner
 
-For convenience, use `scripts/run_sweep.py` to orchestrate sweeps, plots, and a run index (and per-run results.md):
+For convenience, use `scripts/run_sweep.py` to orchestrate sweeps, plots, and a run index:
 
 ```bash
 # Run a sweep from a JSON config, auto-plot, and index the run
@@ -129,11 +130,11 @@ python scripts/run_sweep.py run --config configs/implicit_small.json
 python scripts/run_sweep.py run --config configs/explicit_easy.json
 python scripts/run_sweep.py run --config configs/explicit_hard.json
 
-# Generate plots for an existing summary (heatmaps only; titles include label when provided)
-python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots --label implicit
+# Generate plots for an existing sweep (implicit: lift-vs-n; explicit: heatmaps)
+python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/results.csv --approach implicit --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots --label gpt-4.1-mini
 
-# Append a short section to results.md for a run (includes label if provided)
-python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/summary.csv --approach implicit --label implicit
+# Write structured summary.json for a run (add a label for clarity)
+python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/results.csv --approach implicit --label gpt-4.1
 ```
 
 Unified run layout
@@ -141,8 +142,8 @@ Unified run layout
   - `data/` (generated datasets)
   - `results/` (results_*.jsonl and summary_*.txt)
   - `plots/` (plots generated for the run)
-  - `summary.csv` (aggregate across combos)
-  - `results.md` (short per-run report)
+  - `results.csv` (aggregate across combos)
+  - `summary.json` (written by the `report` subcommand; includes aggregates and params)
 
 ## Diagnostics, regimes, and baselines
 
@@ -157,10 +158,12 @@ Use `configs/explicit_easy.json` and `configs/explicit_hard.json`.
 Token budgets: use `--id_width` (default 4; e.g., 3) to shorten token IDs and better match total prompt tokens across different L. For L comparisons, cap context or shorten IDs so total tokens per item are similar. Expect L=3 > L=2 to persist without aliasing (constraint bonus); with aliasing, the gap should reduce or flip (L=3 ≤ L=2).
 
 Baselines:
-- Implicit: pointer baseline (`--baseline pointer_f_n1`) with chance 1/m. Heatmaps include lift-over-chance.
-- Explicit: first-rank head baseline (`--baseline first_rank_head`) for explicit-easy; chance line 1/k. Heatmaps include lift-over-chance.
+- Implicit: pointer baseline (`--baseline pointer_f_n1`) with chance 1/m.
+- Explicit: first-rank head baseline (`--baseline first_rank_head`) for explicit-easy; chance line 1/k.
 
-Plots: we provide heatmaps only (EM and lift-over-chance). Per-block correctness bars (explicit) include EM, f_n correct, f_{n-1} coherent, f_{n-2} from-chain; in explicit-easy, the first ladder block often appears near-trivial.
+Plots:
+- Implicit: default figure is Lift vs n (one line per m); heatmaps removed.
+- Explicit: heatmaps (EM and lift-over-chance). Per-block correctness bars include EM, f_n correct, f_{n-1} coherent, f_{n-2} from-chain.
 
 ### One-off diagnostics
 
@@ -204,6 +207,16 @@ Outputs include per-block signals:
 - `f_n correct`: whether final choice matches gold
 - `f_{n-1} coherent-from-chain`: chosen f_n head reachable from y_{n-2} via some f_{n-1}
 - `f_{n-2} from-chain`: existence of y_{n-3} → y_{n-2} support in f_{n-2} candidates
+
+### Analyzer metrics (implicit)
+
+Run (across all tags in a sweep):
+```
+python implicit/analyze_errors.py --results_csv runs/implicit/sweep_YYYYMMDD_HHMMSS/results.csv
+```
+Outputs include:
+- Non-EM error types: `other_chain_final_tail`, `in_facts_non_final_tail`, `oov_token`
+- Approximate layer of the predicted token among L0..L_{n-1} (derived from facts); `unknown` typically indicates OOV
 
 ## Current snapshot
 

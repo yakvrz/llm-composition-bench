@@ -21,65 +21,83 @@ def ensure_dir(p: str):
     os.makedirs(p, exist_ok=True)
 
 
-def plot_implicit(rows, outdir: str):
-    by_nm = defaultdict(list)
+def plot_implicit(rows, outdir: str, regime_label: str | None = None):
+    # New default: Lift vs n line plot (one line per m). Heatmaps removed.
+    lift_by_m_then_n = defaultdict(lambda: defaultdict(list))
     for r in rows:
         if r.get('approach') != 'implicit':
             continue
         try:
             n = int(r['n']); m = int(r['m']); acc = float(r['acc'])
+            chance = 0.0 if m <= 1 else 1.0 / m
+            lift = (acc - chance) / (1.0 - chance) if (1.0 - chance) > 0 else None
+            if lift is not None:
+                lift_by_m_then_n[m][n].append(lift)
         except Exception:
             continue
-        by_nm[(n, m)].append(acc)
 
-    if not by_nm:
+    if not lift_by_m_then_n:
         print('No implicit rows found.')
         return
 
-    ns = sorted({n for (n, _) in by_nm.keys()})
-    ms = sorted({m for (_, m) in by_nm.keys()})
-
     import numpy as np
-    mat = np.zeros((len(ns), len(ms)))
-    for i, n in enumerate(ns):
-        for j, m in enumerate(ms):
-            vals = by_nm.get((n, m), [])
-            mat[i, j] = (sum(vals) / len(vals)) if vals else float('nan')
-
+    ns_sorted = sorted({int(r['n']) for r in rows if r.get('approach')=='implicit'})
     plt.figure(figsize=(10, 5))
-    im = plt.imshow(mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
-    plt.colorbar(im, label='EM')
-    plt.xticks(range(len(ms)), ms)
-    plt.yticks(range(len(ns)), ns)
-    plt.xlabel('m (chains)')
-    plt.ylabel('n (hops)')
-    plt.title('Implicit: EM heatmap (mean across seeds)')
+    for m in sorted(lift_by_m_then_n.keys()):
+        ys = []
+        for n in ns_sorted:
+            vals = lift_by_m_then_n[m].get(n, [])
+            ys.append((sum(vals)/len(vals)) if vals else np.nan)
+        plt.plot(ns_sorted, ys, marker='o', label=f'm={m}')
+    plt.ylim(0, 1.05)
+    plt.yticks([i/10 for i in range(0, 11)])
+    plt.xlabel('n (hops)')
+    plt.ylabel('Lift over chance')
+    title = 'Implicit: Lift vs n (by m)'
+    if regime_label:
+        title += f" [{regime_label}]"
+    plt.title(title)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend(title='m', loc='best')
     plt.tight_layout()
-    plt.savefig(os.path.join(outdir, 'heatmap_acc_n_by_m.png'))
+    plt.savefig(os.path.join(outdir, 'lines_lift_vs_n_by_m.png'))
     plt.close()
 
-    # Remove line plots for simplicity per objectives
-
-    # Remove line plots; add lift heatmap
-    import numpy as np
-    lift_mat = np.zeros((len(ns), len(ms)))
-    for i, n in enumerate(ns):
-        for j, m in enumerate(ms):
-            vals = by_nm.get((n, m), [])
-            em = (sum(vals) / len(vals)) if vals else float('nan')
+    # New: Lift vs n line plot (one line per m). Useful when m is fixed.
+    # Compute mean lift per (n, m)
+    lift_by_m_then_n = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        if r.get('approach') != 'implicit':
+            continue
+        try:
+            n = int(r['n']); m = int(r['m']); acc = float(r['acc'])
             chance = 0.0 if m <= 1 else 1.0 / m
-            lift_mat[i, j] = (em - chance) / (1.0 - chance) if em == em and (1.0 - chance) > 0 else float('nan')
-    plt.figure(figsize=(10, 5))
-    im = plt.imshow(lift_mat, aspect='auto', cmap='viridis', vmin=0.0, vmax=1.0)
-    plt.colorbar(im, label='Lift over chance')
-    plt.xticks(range(len(ms)), ms)
-    plt.yticks(range(len(ns)), ns)
-    plt.xlabel('m (chains)')
-    plt.ylabel('n (hops)')
-    plt.title('Implicit: Lift-over-chance heatmap (mean across seeds)')
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, 'heatmap_lift_n_by_m.png'))
-    plt.close()
+            lift = (acc - chance) / (1.0 - chance) if (1.0 - chance) > 0 else None
+            if lift is not None:
+                lift_by_m_then_n[m][n].append(lift)
+        except Exception:
+            continue
+
+    if lift_by_m_then_n:
+        import numpy as np
+        ns_sorted = sorted({int(r['n']) for r in rows if r.get('approach')=='implicit'})
+        plt.figure(figsize=(10, 5))
+        for m in sorted(lift_by_m_then_n.keys()):
+            ys = []
+            for n in ns_sorted:
+                vals = lift_by_m_then_n[m].get(n, [])
+                ys.append((sum(vals)/len(vals)) if vals else np.nan)
+            plt.plot(ns_sorted, ys, marker='o', label=f'm={m}')
+        plt.ylim(0, 1)
+        plt.yticks([i/10 for i in range(0, 11)])
+        plt.xlabel('n (hops)')
+        plt.ylabel('Lift over chance')
+        plt.title('Implicit: Lift vs n (by m)')
+        plt.grid(True, linestyle='--', alpha=0.3)
+        plt.legend(title='m', loc='best')
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, 'lines_lift_vs_n_by_m.png'))
+        plt.close()
 
 
 def plot_explicit(rows, outdir: str, regime_label: str | None = None):
@@ -313,7 +331,7 @@ def main():
         approach = a
 
     if approach == 'implicit':
-        plot_implicit(rows, args.outdir)
+        plot_implicit(rows, args.outdir, regime_label=(args.label or None))
     elif approach == 'explicit':
         plot_explicit(rows, args.outdir, regime_label=(args.label or None))
     else:
