@@ -95,6 +95,7 @@ def main():
     ap.add_argument('--concurrency', type=int, default=4)
     ap.add_argument('--max_retries', type=int, default=3)
     ap.add_argument('--retry_backoff', type=float, default=1.0)
+    ap.add_argument('--scratchpad', action='store_true')
     args = ap.parse_args()
 
     hops_list = parse_list(args.hops)
@@ -185,6 +186,8 @@ def main():
             ]
             if args.baseline:
                 eval_cmd += ['--baseline', args.baseline]
+            if args.scratchpad:
+                eval_cmd += ['--scratchpad']
         if args.save_prompt: eval_cmd.append('--save_prompt')
         if args.save_raw_output: eval_cmd.append('--save_raw_output')
         if args.log_first and args.log_first > 0:

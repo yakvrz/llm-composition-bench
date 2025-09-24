@@ -109,6 +109,7 @@ def cmd_run(args):
         if cfg.get('ablate_inner'): cmd.append('--ablate_inner')
         if cfg.get('ablate_hop') is not None: cmd.extend(['--ablate_hop', str(cfg['ablate_hop'])])
         if 'id_width' in cfg: cmd.extend(['--id_width', str(cfg['id_width'])])
+        if cfg.get('scratchpad'): cmd.append('--scratchpad')
     else:
         if cfg.get('path_collision_stress'): cmd.append('--path_collision_stress')
         if cfg.get('block_head_balance'): cmd.append('--block_head_balance')

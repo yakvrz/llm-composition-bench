@@ -9,7 +9,7 @@ Output:
 Hygiene:
 - Assert there are at least two f_{n-1} lines.
 """
-import argparse, json, sys, time
+import argparse, json, sys, time, re
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from typing import Any, Dict, List
@@ -30,18 +30,53 @@ OPENBOOK_INSTRUCTIONS = (
 )
 
 
-def build_prompt(item: Dict[str, Any]) -> str:
+def build_prompt(item: Dict[str, Any], scratchpad: bool = False) -> str:
     n = int(item.get("n", 0))
     facts = item.get("facts_bag") or []
     facts_block = "\n".join(f"{h} ->{r}-> {t}" for h, r, t in facts)
     q = item["question"].strip()
+    scratchpad_block = ("Scratchpad (use this area to reason step-by-step; optional):\n\n" if scratchpad else "")
     return (
         f"{OPENBOOK_INSTRUCTIONS.replace('{n}', str(n))}\n\n"
         f"Facts (shuffled):\n{facts_block}\n\n"
         f"Question: {q}\n\n"
+        f"{scratchpad_block}"
         "Final answer (token only):"
     )
 
+
+TOKEN_REGEX = re.compile(r"\b[A-Z]_[0-9]{1,8}\b")
+
+
+def extract_token_from_response(raw_text: str) -> str:
+    lines = [ln.strip() for ln in (raw_text or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    # Prefer explicit Final answer line (take last occurrence)
+    final_idx = -1
+    for i, ln in enumerate(lines):
+        if ln.lower().startswith("final answer"):
+            final_idx = i
+    if final_idx >= 0:
+        # Try token on same line
+        m = TOKEN_REGEX.search(lines[final_idx])
+        if m:
+            return m.group(0)
+        # Else try next non-empty line
+        if final_idx + 1 < len(lines):
+            m2 = TOKEN_REGEX.search(lines[final_idx + 1])
+            if m2:
+                return m2.group(0)
+        # Else try after colon as exact token
+        tail = lines[final_idx].split(":")[-1].strip()
+        if TOKEN_REGEX.fullmatch(tail):
+            return tail
+    # Fallback: last token-like anywhere in the text
+    matches = list(TOKEN_REGEX.finditer(raw_text or ""))
+    if matches:
+        return matches[-1].group(0)
+    # Last resort: first non-empty line
+    return lines[0]
 
 def iter_jsonl(path: str):
     with (sys.stdin if path == "-" else open(path, "r", encoding="utf-8")) as f:
@@ -71,6 +106,7 @@ def main():
     ap.add_argument("--max_retries", type=int, default=3, help="max retries on API errors")
     ap.add_argument("--retry_backoff", type=float, default=1.0, help="initial backoff seconds for retries")
     ap.add_argument("--log_every", type=int, default=1, help="print progress every N items (1=every item)")
+    ap.add_argument("--scratchpad", action="store_true", help="allow model to write free-form reasoning before final answer")
     args = ap.parse_args()
 
     client = OpenAI()
@@ -123,15 +159,11 @@ def main():
                 err_local = None
                 last_prompt_local = ""; last_raw_local = ""
             else:
-                prompt = build_prompt(trial_item)
+                prompt = build_prompt(trial_item, scratchpad=bool(args.scratchpad))
                 resp, err = call_model_with_retries(prompt)
                 if resp is not None:
                     raw_text = (resp.output_text or "").strip()
-                    for line in raw_text.splitlines():
-                        line = line.strip()
-                        if line:
-                            pred_local = line
-                            break
+                    pred_local = extract_token_from_response(raw_text)
                     err_local = None
                     last_prompt_local = prompt
                     last_raw_local = raw_text
@@ -159,6 +191,7 @@ def main():
             "facts_bag": item.get("facts_bag"),
             "order_trials": int(args.order_trials),
             "baseline": args.baseline or None,
+            "scratchpad": bool(args.scratchpad),
         }
         with lock:
             perf["total"]["n"] += 1
@@ -201,5 +234,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
