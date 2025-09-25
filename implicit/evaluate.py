@@ -30,17 +30,26 @@ OPENBOOK_INSTRUCTIONS = (
 )
 
 
-def build_prompt(item: Dict[str, Any], scratchpad: bool = False) -> str:
+def build_prompt(item: Dict[str, Any], reasoning_steps: bool = False) -> str:
     n = int(item.get("n", 0))
     facts = item.get("facts_bag") or []
     facts_block = "\n".join(f"{h} ->{r}-> {t}" for h, r, t in facts)
     q = item["question"].strip()
-    scratchpad_block = ("Scratchpad (use this area to reason step-by-step; optional):\n\n" if scratchpad else "")
+    reasoning_block = ""
+    if reasoning_steps and n > 1:
+        step_lines = []
+        for idx in range(1, n):
+            step_lines.append(f"Step {idx} (apply f{idx}):")
+        reasoning_block = (
+            "Reasoning (fill every step before answering):\n"
+            + "\n".join(step_lines)
+            + "\n\n"
+        )
     return (
         f"{OPENBOOK_INSTRUCTIONS.replace('{n}', str(n))}\n\n"
         f"Facts (shuffled):\n{facts_block}\n\n"
         f"Question: {q}\n\n"
-        f"{scratchpad_block}"
+        f"{reasoning_block}"
         "Final answer (token only):"
     )
 
@@ -52,7 +61,7 @@ def extract_token_from_response(raw_text: str) -> str:
     lines = [ln.strip() for ln in (raw_text or "").splitlines() if ln.strip()]
     if not lines:
         return ""
-    # Prefer explicit Final answer line (take last occurrence)
+    # Prefer the Final answer line (take last occurrence)
     final_idx = -1
     for i, ln in enumerate(lines):
         if ln.lower().startswith("final answer"):
@@ -77,6 +86,28 @@ def extract_token_from_response(raw_text: str) -> str:
         return matches[-1].group(0)
     # Last resort: first non-empty line
     return lines[0]
+
+
+def analyze_reasoning(raw_text: str, n: int) -> tuple[list[str] | None, bool | None]:
+    """Extract the final token from each reasoning step when structured slots are present."""
+    if not raw_text or n <= 1:
+        return None, None
+    tokens: list[str] = []
+    complete = True
+    lines = [ln.strip() for ln in raw_text.splitlines()]
+    for idx in range(1, n):
+        step_line = next((ln for ln in lines if ln.lower().startswith(f"step {idx}")), None)
+        if not step_line:
+            tokens.append("")
+            complete = False
+            continue
+        step_tokens = TOKEN_REGEX.findall(step_line)
+        if step_tokens:
+            tokens.append(step_tokens[-1])
+        else:
+            tokens.append("")
+            complete = False
+    return tokens, complete
 
 def iter_jsonl(path: str):
     with (sys.stdin if path == "-" else open(path, "r", encoding="utf-8")) as f:
@@ -106,7 +137,7 @@ def main():
     ap.add_argument("--max_retries", type=int, default=3, help="max retries on API errors")
     ap.add_argument("--retry_backoff", type=float, default=1.0, help="initial backoff seconds for retries")
     ap.add_argument("--log_every", type=int, default=1, help="print progress every N items (1=every item)")
-    ap.add_argument("--scratchpad", action="store_true", help="allow model to write free-form reasoning before final answer")
+    ap.add_argument("--reasoning_steps", action="store_true", help="insert structured step-by-step slots before the final answer prompt")
     args = ap.parse_args()
 
     client = OpenAI()
@@ -146,6 +177,8 @@ def main():
         # Order trials
         trial_ems_local = []
         last_prompt_local = ""; last_raw_local = ""; pred_local = ""; err_local = None
+        reasoning_tokens_local: list[str] | None = None
+        reasoning_complete_local: bool | None = None
         import random as _rnd
         for t in range(max(1, int(args.order_trials))):
             facts = list(item.get("facts_bag") or [])
@@ -159,7 +192,7 @@ def main():
                 err_local = None
                 last_prompt_local = ""; last_raw_local = ""
             else:
-                prompt = build_prompt(trial_item, scratchpad=bool(args.scratchpad))
+                prompt = build_prompt(trial_item, reasoning_steps=bool(args.reasoning_steps))
                 resp, err = call_model_with_retries(prompt)
                 if resp is not None:
                     raw_text = (resp.output_text or "").strip()
@@ -167,6 +200,11 @@ def main():
                     err_local = None
                     last_prompt_local = prompt
                     last_raw_local = raw_text
+                    if args.reasoning_steps:
+                        reasoning_tokens_local, reasoning_complete_local = analyze_reasoning(raw_text, n_local)
+                        if reasoning_complete_local and reasoning_tokens_local:
+                            final_step = reasoning_tokens_local[-1]
+                            pred_local = final_step if final_step else ""
                     if not printed_api_ok:
                         with lock:
                             if not printed_api_ok:
@@ -191,8 +229,17 @@ def main():
             "facts_bag": item.get("facts_bag"),
             "order_trials": int(args.order_trials),
             "baseline": args.baseline or None,
-            "scratchpad": bool(args.scratchpad),
         }
+        if args.reasoning_steps:
+            rec_local["reasoning_steps"] = True
+            if reasoning_tokens_local is not None:
+                rec_local["reasoning_tokens"] = reasoning_tokens_local
+            if reasoning_complete_local is not None:
+                rec_local["reasoning_complete"] = reasoning_complete_local
+        if args.save_prompt and ((args.log_first <= 0) or (idx < args.log_first)):
+            rec_local["prompt"] = last_prompt_local
+        if args.save_raw_output and ((args.log_first <= 0) or (idx < args.log_first)):
+            rec_local["raw_output"] = last_raw_local
         with lock:
             perf["total"]["n"] += 1
             perf["total"]["correct"] += int(is_em_local)
@@ -234,4 +281,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
