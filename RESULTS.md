@@ -1,6 +1,6 @@
 # Implicit Composition with and without Structured Reasoning
 
-This report compares two sweeps on the implicit n-hop benchmark (m = 4, seeds 13 & 27, 120 items per combination, gpt-4.1-mini, temp 0):
+This report compares two sweeps on the implicit n-hop benchmark (m = 4, seeds 13 & 27, 120 items per combination, gpt-4.1-mini, temp 0). *EM* denotes exact-match accuracy, and *Lift* is `(accuracy − 1/m) / (1 − 1/m)`.
 
 1. **Baseline prompt** – no reasoning scaffold (`runs/implicit/sweep_20250917_204638/`).
 2. **Structured reasoning prompt** – added “Step _i_” slots before the answer (`runs/implicit/sweep_20250925_171052/`).

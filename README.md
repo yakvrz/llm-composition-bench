@@ -8,6 +8,11 @@
 - Optional structured reasoning prompts plus OpenRouter integration out of the box
 - Baseline results for standard prompts vs. step-by-step scaffolds in [`RESULTS.md`](RESULTS.md)
 
+**Terminology**
+- *Exact Match (EM)*: fraction of items answered with the correct final token.
+- *Lift over chance*: `(accuracy - 1/m) / (1 - 1/m)` for bag size `m`; measures improvement over random guessing.
+- *Structured reasoning prompt*: a template that asks the model to fill “Step i” lines for each hop before giving the final answer.
+
 ## What's included
 
 - `implicit/` — bag-of-facts generator and evaluator
