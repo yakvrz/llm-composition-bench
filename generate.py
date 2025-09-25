@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Implicit generator: bag-of-facts without explicit candidate blocks.
+n-hop generator: bag-of-facts without candidate blocks.
 
 Spec per item:
 - Build M-sized layers L0..Ln with bijective f1..fn.
@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--m", type=int, default=6, help="number of chains to include in the bag (>=4)")
     ap.add_argument("--M", type=int, default=512)
     ap.add_argument("--id_width", type=int, default=4, help="zero-padded width for token IDs (shorten to match token budgets)")
-    ap.add_argument("--out", type=str, default="data/implicit.jsonl")
+    ap.add_argument("--out", type=str, default="data/benchmark.jsonl")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--sleep", type=float, default=0.0)
     ap.add_argument("--ablate_inner", action="store_true", help="remove all edges for one inner hop f_j to create ambiguity")
@@ -47,7 +47,7 @@ def main():
 
     total = min(args.items, len(L0))
     print(
-        f"[implicit/generate] Start: items={total}, n={args.hops}, m={args.m}, M={args.M}, seed={args.seed}, "
+        f"[benchmark/generate] Start: items={total}, n={args.hops}, m={args.m}, M={args.M}, seed={args.seed}, "
         f"ablate_inner={args.ablate_inner}, ablate_hop={args.ablate_hop}\n→ {args.out}",
         flush=True,
     )
@@ -116,8 +116,8 @@ def main():
             q = " of ".join([f"f{i}" for i in range(args.hops, 0, -1)])
             q_text = f"What is {q} of {q_start}?".replace(f"f{args.hops} of ", "")  # ask up to f_{n-1}
             item = {
-                "id": f"IMP-{i:06d}",
-                "type": "implicit",
+                "id": f"BENCH-{i:06d}",
+                "type": "benchmark",
                 "n": args.hops,
                 "m": args.m,
                 "facts_bag": facts,
@@ -132,12 +132,10 @@ def main():
             if args.sleep > 0:
                 time.sleep(args.sleep)
             if ((i + 1) % progress_interval == 0) or ((i + 1) == total):
-                print(f"[implicit/generate] progress: {i+1}/{total}", flush=True)
+                print(f"[benchmark/generate] progress: {i+1}/{total}", flush=True)
 
-    print(f"[implicit/generate] Done. Wrote {total} items to {args.out}", flush=True)
+    print(f"[benchmark/generate] Done. Wrote {total} items to {args.out}", flush=True)
 
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run implicit diagnostics for a single (n, m) configuration."""
+"""Run diagnostics for a single (n, m) configuration."""
 
 import argparse
 import csv
@@ -68,7 +68,7 @@ def write_summary_csv(run_root: Path, rows: list[dict]):
 
 def write_summary_json(run_root: Path, args, rows: list[dict]):
     payload = {
-        'approach': 'implicit',
+        'approach': 'benchmark',
         'tag': run_root.name,
         'results_csv': (run_root / 'results.csv').as_posix(),
         'plots_dir': (run_root / 'plots').as_posix(),
@@ -100,7 +100,7 @@ def plot_variant_bars(run_root: Path, rows: list[dict], m: int, n: int):
     plt.bar(labels, ems)
     plt.ylim(0, 1)
     plt.ylabel('EM')
-    plt.title(f'Implicit diagnostics EM by variant (n={n}, m={m})')
+    plt.title(f'Benchmark diagnostics EM by variant (n={n}, m={m})')
     plt.tight_layout()
     plt.savefig(plots_dir / 'bars_em_by_variant.png')
     plt.close()
@@ -113,14 +113,14 @@ def plot_variant_bars(run_root: Path, rows: list[dict], m: int, n: int):
     plt.bar(labels, lifts)
     plt.ylim(0, 1)
     plt.ylabel('Lift over chance')
-    plt.title(f'Implicit diagnostics lift by variant (n={n}, m={m})')
+    plt.title(f'Benchmark diagnostics lift by variant (n={n}, m={m})')
     plt.tight_layout()
     plt.savefig(plots_dir / 'bars_lift_by_variant.png')
     plt.close()
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Run implicit diagnostics')
+    ap = argparse.ArgumentParser(description='Run n-hop diagnostics')
     ap.add_argument('--items', type=int, default=60)
     ap.add_argument('--n', type=int, required=True)
     ap.add_argument('--m', type=int, required=True)
@@ -139,7 +139,7 @@ def main():
     args = ap.parse_args()
 
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_root = Path('runs') / 'implicit' / f'diag_{ts}'
+    run_root = Path('runs') / 'benchmark' / f'diag_{ts}'
     data_dir = run_root / 'data'
     results_dir = run_root / 'results'
     ensure_dir(data_dir)
@@ -148,13 +148,13 @@ def main():
     variants = [v.strip() for v in args.variants.split(',') if v.strip()]
     rows = []
     for variant in variants:
-        tag = f"imp_n{args.n}_m{args.m}_s{args.seed}_{variant}"
+        tag = f"bench_n{args.n}_m{args.m}_s{args.seed}_{variant}"
         ds_path = data_dir / f"synth_{tag}.jsonl"
         res_path = results_dir / f"results_{tag}.jsonl"
         summary_txt = results_dir / f"summary_{tag}.txt"
 
         gen_cmd = [
-            sys.executable, 'implicit/generate.py',
+            sys.executable, 'generate.py',
             '--items', str(args.items), '--hops', str(args.n), '--m', str(args.m),
             '--M', str(args.M), '--seed', str(args.seed), '--out', str(ds_path)
         ]
@@ -165,7 +165,7 @@ def main():
             sys.exit(rc)
 
         eval_cmd = [
-            sys.executable, 'implicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+            sys.executable, 'evaluate.py', '--in', str(ds_path), '--out', str(res_path),
             '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
         ]

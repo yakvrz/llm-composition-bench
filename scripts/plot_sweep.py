@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot implicit sweep results as line charts."""
+"""Plot benchmark sweep results as line charts."""
 
 import argparse
 import csv
@@ -24,11 +24,11 @@ def ensure_dir(path: Path):
 
 
 def aggregate_by_m_and_n(rows: list[dict]) -> tuple[list[int], dict[int, list[float]], dict[int, list[float]]]:
-    ns = sorted({int(r['n']) for r in rows if r.get('approach') == 'implicit'})
+    ns = sorted({int(r['n']) for r in rows if r.get('approach') == 'benchmark'})
     lift_by_m: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
     acc_by_m: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
-        if r.get('approach') != 'implicit':
+        if r.get('approach') != 'benchmark':
             continue
         n = int(r['n'])
         m = int(r['m'])
@@ -68,10 +68,10 @@ def plot_lines(ns: list[int], series_by_m: dict[int, list[float]], ylabel: str, 
     plt.close()
 
 
-def plot_implicit(rows: list[dict], outdir: Path, regime_label: str | None):
+def plot_results(rows: list[dict], outdir: Path, regime_label: str | None):
     ns, mean_acc, mean_lift = aggregate_by_m_and_n(rows)
     if not ns:
-        print('No implicit rows found; nothing to plot.')
+        print('No benchmark rows found; nothing to plot.')
         return
 
     label_suffix = f" [{regime_label}]" if regime_label else ''
@@ -79,20 +79,20 @@ def plot_implicit(rows: list[dict], outdir: Path, regime_label: str | None):
         ns,
         mean_acc,
         'Accuracy (EM)',
-        f'Implicit: Accuracy vs n (by m){label_suffix}',
+        f'Benchmark: Accuracy vs n (by m){label_suffix}',
         outdir / 'lines_acc_vs_n_by_m.png',
     )
     plot_lines(
         ns,
         mean_lift,
         'Lift over chance',
-        f'Implicit: Lift vs n (by m){label_suffix}',
+        f'Benchmark: Lift vs n (by m){label_suffix}',
         outdir / 'lines_lift_vs_n_by_m.png',
     )
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Plot implicit sweep results')
+    ap = argparse.ArgumentParser(description='Plot sweep results')
     ap.add_argument('--summary', required=True)
     ap.add_argument('--outdir', required=True)
     ap.add_argument('--label', default='')
@@ -101,7 +101,7 @@ def main():
     rows = read_rows(args.summary)
     outdir = Path(args.outdir)
     ensure_dir(outdir)
-    plot_implicit(rows, outdir, args.label or None)
+    plot_results(rows, outdir, args.label or None)
     print(f'Plots written to: {outdir}')
 
 

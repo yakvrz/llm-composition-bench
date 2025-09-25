@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Experiment helper CLI for implicit sweeps: run configs, plot results, and write per-run summaries.
+Experiment helper CLI for the n-hop composition benchmark: run configs, plot results, and write per-run summaries.
 
 Commands:
   - run   --config CONFIG.json       → runs scripts/sweep.py, plots to run root, indexes runs/index.csv
@@ -65,7 +65,7 @@ def write_index_row(summary: Path, config_path: Path, plots_dir: Path, extras: d
     sweep_root = summary.parent.as_posix()
     row = [
         ts,
-        'implicit',
+        'benchmark',
         config_path.as_posix(),
         sweep_root,
         summary.as_posix(),
@@ -87,13 +87,13 @@ def summarize_for_report(summary_path: Path) -> str:
             rows.append(r)
     nm: dict[tuple[int, int], list[float]] = {}
     for r in rows:
-        if r.get('approach') != 'implicit':
+        if r.get('approach') != 'benchmark':
             continue
         n = int(r['n'])
         m = int(r['m'])
         acc = float(r['acc'])
         nm.setdefault((n, m), []).append(acc)
-    lines = ['- Implicit EM (mean across seeds) by (n, m):']
+    lines = ['- EM (mean across seeds) by (n, m):']
     for (n, m) in sorted(nm):
         vals = nm[(n, m)]
         lines.append(f"  - n={n}, m={m}: {statistics.mean(vals):.3f}")
@@ -103,9 +103,9 @@ def summarize_for_report(summary_path: Path) -> str:
 def cmd_run(args):
     cfg_path = Path(args.config)
     cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
-    approach = cfg.get('approach', 'implicit')
-    if approach != 'implicit':
-        raise ValueError(f"Only implicit approach is supported (got {approach!r})")
+    approach = cfg.get('approach', 'benchmark')
+    if approach != 'benchmark':
+        raise ValueError(f"Unsupported approach {approach!r}")
 
     cmd = [sys.executable, 'scripts/sweep.py']
 
@@ -212,7 +212,7 @@ def cmd_report(args):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Implicit sweep helper CLI')
+    ap = argparse.ArgumentParser(description='Benchmark sweep helper CLI')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
     ap_run = sub.add_parser('run', help='Run sweep, plot, and index from a JSON config')

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Error analysis for implicit approach (bag-of-facts).
+Error analysis for the n-hop composition benchmark (bag-of-facts).
 
 Reads all results JSONL files under a sweep root's results/ directory and reports:
 - Overall and per-n accuracy
@@ -8,9 +8,9 @@ Reads all results JSONL files under a sweep root's results/ directory and report
 - Pred token layer (L0..L_{n-1}) when derivable from facts
 
 Usage:
-  python implicit/analyze_errors.py --sweep_root runs/implicit/sweep_YYYYMMDD_HHMMSS
+  python analyze_errors.py --sweep_root runs/benchmark/sweep_YYYYMMDD_HHMMSS
   or
-  python implicit/analyze_errors.py --results_csv runs/implicit/sweep_.../results.csv
+  python analyze_errors.py --results_csv runs/benchmark/sweep_.../results.csv
 """
 import argparse, csv, json
 from pathlib import Path
@@ -182,7 +182,7 @@ def main():
     analyses = [analyze_record(r) for r in recs]
     summary = summarize(analyses)
 
-    print('=== Implicit Error Analysis ===')
+    print('=== Benchmark Error Analysis ===')
     print(f"TOTAL: {summary['total']}  ACC: {summary['acc']:.3f}")
     print('By n:')
     for k, v in summary['by_n'].items():
@@ -209,5 +209,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

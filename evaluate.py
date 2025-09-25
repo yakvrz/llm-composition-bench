@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evaluator for the implicit approach (bag-of-facts, no candidate blocks).
+Evaluator for the n-hop composition benchmark (bag-of-facts, no candidate blocks).
 
 Prompt:
 - Show shuffled facts (m chains × first n−1 hops). Ask for y_{n-1} given the start.
@@ -166,7 +166,7 @@ def main():
 
     perf = {"total": {"n": 0, "correct": 0}, "by_n": defaultdict(lambda: {"n": 0, "correct": 0})}
     outputs = []
-    print(f"[implicit/eval] start: model={args.model} items={len(items)} order_trials={args.order_trials} baseline={args.baseline or 'none'}", flush=True)
+    print(f"[benchmark/eval] start: model={args.model} items={len(items)} order_trials={args.order_trials} baseline={args.baseline or 'none'}", flush=True)
     printed_api_ok = False
 
     lock = threading.Lock()
@@ -309,12 +309,12 @@ def main():
                     if not printed_api_ok:
                         with lock:
                             if not printed_api_ok:
-                                print(f"[implicit/eval] API OK model={args.model}", flush=True)
+                                print(f"[benchmark/eval] API OK model={args.model}", flush=True)
                                 printed_api_ok = True
                 else:
                     pred_local = ""; last_raw_local = ""; err_local = err or ""
                     with lock:
-                        print(f"[implicit/eval] API ERROR item={item.get('id')} err={err_local}", flush=True)
+                        print(f"[benchmark/eval] API ERROR item={item.get('id')} err={err_local}", flush=True)
             is_em = exact_match(pred_local, aliases_local)
             trial_ems_local.append(int(is_em))
         # aggregate over order trials (mean EM per item)
@@ -349,7 +349,7 @@ def main():
             if fout:
                 fout.write(json.dumps(rec_local, ensure_ascii=False) + "\n")
                 fout.flush()
-            print(f"[implicit/eval] {idx+1}/{len(items)} em={is_em_local}", flush=True)
+            print(f"[benchmark/eval] {idx+1}/{len(items)} em={is_em_local}", flush=True)
         return rec_local
 
     if int(args.concurrency) > 1 and not args.baseline:
@@ -359,7 +359,7 @@ def main():
                 try:
                     outputs.append(fut.result())
                 except Exception as e:
-                    print(f"[implicit/eval] worker error: {e}", flush=True)
+                    print(f"[benchmark/eval] worker error: {e}", flush=True)
     else:
         for idx, item in enumerate(items):
             outputs.append(eval_one(idx, item))
@@ -373,7 +373,7 @@ def main():
         return 0.0 if n == 0 else c / n
     total_n = perf["total"]["n"]
     total_c = perf["total"]["correct"]
-    print("\n=== Implicit n-hop Accuracy (Exact Match) ===")
+    print("\n=== Benchmark n-hop Accuracy (Exact Match) ===")
     print(f"TOTAL: {total_c}/{total_n} = {acc(total_c, total_n):.3f}")
     print("By n (hops):")
     for n_key, v in sorted(perf["by_n"].items()):

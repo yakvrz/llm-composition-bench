@@ -1,11 +1,9 @@
-# Implicit Composition with and without Structured Reasoning
+# Composition Runs with and without Structured Reasoning
 
-This report compares two sweeps on the implicit n-hop benchmark (m = 4, seeds 13 & 27, 120 items per combination, gpt-4.1-mini, temp 0). *EM* denotes exact-match accuracy, and *Lift* is `(accuracy − 1/m) / (1 − 1/m)`.
+This report compares two sweeps on the n-hop benchmark (m = 4, seeds 13 & 27, 120 items per combination, gpt-4.1-mini, temp 0). *EM* denotes exact-match accuracy, and *Lift* is `(accuracy − 1/m) / (1 − 1/m)`.
 
-1. **Baseline prompt** – no reasoning scaffold (`runs/implicit/sweep_20250917_204638/`).
-2. **Structured reasoning prompt** – added “Step _i_” slots before the answer (`runs/implicit/sweep_20250925_171052/`).
-
-For reference, a reproduction of the baseline prompt on the same day (`runs/implicit/sweep_20250925_173317/`) matches the original results.
+1. **Baseline prompt** – no reasoning scaffold (`runs/benchmark/sweep_20250917_204638/`).
+2. **Structured reasoning prompt** – added “Step _i_” slots before the answer (`runs/benchmark/sweep_20250925_171052/`).
 
 ## Aggregate Accuracy & Lift (per n, averaged over two seeds)
 
@@ -36,7 +34,6 @@ The structured sweep records whether all reasoning steps were populated:
 
 - **Major boost for n≤6:** Once the model is cued to list each hop, it reliably spells out the correct intermediate tokens. Even if the “Final answer” line remains empty, the target appears in the last step, so the evaluator extracts the right tail. Accuracy climbs from ~0.64→1.00 at n=5 and ~0.41→0.996 at n=6.
 - **Collapse for deeper chains:** At n≥7 the model fills early steps but fails to complete the last slot; the final hop never surfaces, so EM drops to zero despite partial reasoning.
-- **Baseline reproduction:** Re-running the original prompt with identical parameters reproduces the expected degradation (e.g. n=5 ≈0.65 EM, n=6 ≈0.37). Thus the structured template, not RNG drift, drives the improvement.
 - **Extraction behavior:** By design the evaluator falls back to “last token-like string” in the output. With structured reasoning, that string is the final hop tail whenever the steps are complete. Tightening extraction (e.g., require a dedicated “Final answer” line) would produce stricter scores.
 
 ## Next Steps

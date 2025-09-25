@@ -1,9 +1,9 @@
 # n-hop Composition Benchmark
 
-This repo tests implicit n-hop reasoning. Each item is a bag of facts covering m disjoint chains. The model must compose the correct tail without candidates.
+This repo tests n-hop reasoning without candidates. Each item is a bag of facts covering m disjoint chains. The model must compose the correct tail using only those facts.
 
 **Key pieces**
-- `implicit/` holds the generator and evaluator
+- `generate.py` and `evaluate.py` implement the pipeline
 - `scripts/` wraps sweeps, plotting, and diagnostics
 - `data/testsets/` ships reusable splits (n 4, 6, 8 with m 4)
 - [`RESULTS.md`](RESULTS.md) logs baseline vs. structured reasoning runs
@@ -15,10 +15,9 @@ This repo tests implicit n-hop reasoning. Each item is a bag of facts covering m
 
 ## What's included
 
-- `implicit/`: generator and evaluator for the implicit setting
-  - `implicit/generate.py`: emits n-hop chains with balanced relation counts across m distractors
-  - `implicit/evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
-- `scripts/sweep.py`: sweep utility (`runs/implicit/<tag>/` layout: data/, results/, plots/, results.csv)
+- `generate.py`: emits n-hop chains with balanced relation counts across m distractors
+- `evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
+- `scripts/sweep.py`: sweep utility (`runs/benchmark/<tag>/` layout: data/, results/, plots/, results.csv)
 - `scripts/run_sweep.py`: orchestrates sweeps, plotting, and reporting
 - `scripts/plot_sweep.py`: renders accuracy and lift curves vs. n
 - `scripts/run_diagnostics.py`: quick variant runner (control, ablate, baseline, optional reasoning)
@@ -26,11 +25,11 @@ This repo tests implicit n-hop reasoning. Each item is a bag of facts covering m
 
 ## Data format (JSONL)
 
-Implicit item example:
+Benchmark item example:
 ```json
 {
-  "id": "IMP-000123",
-  "type": "implicit",
+  "id": "BENCH-000123",
+  "type": "benchmark",
   "n": 5,
   "m": 8,
   "facts_bag": [["A_0001","f1","B_0100"], ..., ["D_0123","f4","E_0999"]],
@@ -40,7 +39,7 @@ Implicit item example:
 }
 ```
 
-## Parameters (implicit)
+## Parameters
 
 - `--items`: number of instances to generate
 - `--hops`: hop count n
@@ -58,10 +57,10 @@ Prereqs: Python 3.9+, `pip install openai python-dotenv`. Create a `.env` with:
 OPENAI_API_KEY=sk-...
 ```
 
-Generate and evaluate a small implicit dataset:
+Generate and evaluate a small dataset:
 ```bash
-python implicit/generate.py --items 200 --hops 5 --m 8 --M 512 --seed 123 --out data/implicit.jsonl
-python implicit/evaluate.py --in data/implicit.jsonl --out runs/implicit_run.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 | tee runs/implicit_run.log
+python generate.py --items 200 --hops 5 --m 8 --M 512 --seed 123 --out data/benchmark.jsonl
+python evaluate.py --in data/benchmark.jsonl --out runs/benchmark_run.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 | tee runs/benchmark_run.log
 ```
 
 Sweep over n and m for a quick baseline:
@@ -77,10 +76,10 @@ python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4 --seeds 13,27 --r
 To keep runs comparable, use the cached files under `data/testsets/` (seed 13, `M=256`, `id_width=3`).
 
 ```bash
-python implicit/evaluate.py \
-  --in data/testsets/implicit_n4_m4_seed13.jsonl \
-  --in data/testsets/implicit_n6_m4_seed13.jsonl \
-  --in data/testsets/implicit_n8_m4_seed13.jsonl \
+python evaluate.py \
+  --in data/testsets/benchmark_n4_m4_seed13.jsonl \
+  --in data/testsets/benchmark_n6_m4_seed13.jsonl \
+  --in data/testsets/benchmark_n8_m4_seed13.jsonl \
   --model openai/gpt-4o --temp 0.0 --max_output_tokens 48 \
   --out runs/manual_eval/gpt-4o.jsonl
 ```
@@ -89,7 +88,7 @@ You can still synthesize new splits, but reuse the cached ones unless you need f
 
 ### Using OpenRouter models
 
-`implicit/evaluate.py` routes through OpenRouter when these variables are present:
+`evaluate.py` routes through OpenRouter when these variables are present:
 
 ```
 export OPENROUTER_API_KEY=sk-or-...
@@ -104,12 +103,12 @@ The client tries the Responses API first and falls back to Chat Completions if n
 
 Use `scripts/run_sweep.py` to manage sweeps, plots, and indexing:
 ```bash
-python scripts/run_sweep.py run --config configs/implicit_small.json
-python scripts/run_sweep.py plot --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/results.csv --outdir runs/implicit/sweep_YYYYMMDD_HHMMSS/plots --label gpt-4.1-mini
-python scripts/run_sweep.py report --summary runs/implicit/sweep_YYYYMMDD_HHMMSS/results.csv
+python scripts/run_sweep.py run --config configs/benchmark_small.json
+python scripts/run_sweep.py plot --summary runs/benchmark/sweep_YYYYMMDD_HHMMSS/results.csv --outdir runs/benchmark/sweep_YYYYMMDD_HHMMSS/plots --label gpt-4.1-mini
+python scripts/run_sweep.py report --summary runs/benchmark/sweep_YYYYMMDD_HHMMSS/results.csv
 ```
 
-Runs are stored under `runs/implicit/sweep_<timestamp>/` with subfolders `data/`, `results/`, `plots/`, and an aggregate `results.csv`.
+Runs are stored under `runs/benchmark/sweep_<timestamp>/` with subfolders `data/`, `results/`, `plots/`, and an aggregate `results.csv`.
 
 ## Diagnostics and baselines
 
@@ -132,13 +131,13 @@ Smoke tests validate end-to-end generation and evaluation:
 python -m pytest -q tests/
 ```
 
-Run the implicit-only smoke test directly:
+Run the smoke test directly:
 ```bash
-python -m pytest -q tests/test_implicit.py
+python -m pytest -q tests/test_benchmark.py
 ```
 
 ## Notes
 
-- `scripts/sweep.py` and `scripts/run_sweep.py` now default to implicit-only behaviour.
-- Scratchpad prompting has been removed; prompts now present only the shuffled facts and the final answer line.
+- `scripts/sweep.py` and `scripts/run_sweep.py` default to this bag-of-facts benchmark.
+- Prompts present only the shuffled facts and a final answer line.
 - Shared evaluation sets live under `data/testsets/`; add new JSONL files there when you need additional seeds or hop counts.

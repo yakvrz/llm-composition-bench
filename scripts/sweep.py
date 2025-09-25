@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Implicit-only parameter sweep runner for the symbolic n-hop benchmark.
+n-hop composition benchmark sweep runner.
 
 Generates datasets and evaluates across combinations.
 Writes unified run layout:
-  runs/implicit/sweep_<timestamp>/
+  runs/benchmark/sweep_<timestamp>/
     - data/
     - results/
     - plots/  (populated by scripts/plot_sweep.py)
@@ -99,7 +99,7 @@ def main():
     seeds_list = parse_list(args.seeds)
 
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_root = Path('runs') / 'implicit' / f'sweep_{ts}'
+    run_root = Path('runs') / 'benchmark' / f'sweep_{ts}'
     ensure_dir(run_root)
     data_dir = run_root / 'data'
     results_dir = run_root / 'results'
@@ -108,12 +108,12 @@ def main():
 
     combos = list(itertools.product(hops_list, m_list, seeds_list))
     total_combos = len(combos)
-    print(f"[sweep] Starting sweep (implicit) with {total_combos} combinations...", flush=True)
+    print(f"[sweep] Starting sweep with {total_combos} combinations...", flush=True)
 
     rows = []
     for idx, combo in enumerate(combos, start=1):
         n, mval, seed = combo
-        tag = f"imp_n{n}_m{mval}_s{seed}"
+        tag = f"bench_n{n}_m{mval}_s{seed}"
         out_dir = run_root / tag
         ds_path = data_dir / f"synth_{tag}.jsonl"
         res_path = results_dir / f"results_{tag}.jsonl"
@@ -122,7 +122,7 @@ def main():
         # 1) Generate
         print(f"[sweep] [{idx}/{total_combos}] GEN {tag} ...", flush=True)
         gen_cmd = [
-            sys.executable, 'implicit/generate.py',
+            sys.executable, 'generate.py',
             '--items', str(args.items), '--hops', str(n), '--m', str(mval),
             '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
         ]
@@ -136,7 +136,7 @@ def main():
         # 2) Evaluate
         print(f"[sweep] [{idx}/{total_combos}] EVAL {tag} ...", flush=True)
         eval_cmd = [
-            sys.executable, 'implicit/evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+            sys.executable, 'evaluate.py', '--in', str(ds_path), '--out', str(res_path),
             '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
         ]
@@ -153,7 +153,7 @@ def main():
 
         rc = stream_cmd(eval_cmd, log_path=sum_path, env=os.environ.copy())
         correct, total, acc = compute_em(res_path)
-        rows.append({'approach': 'implicit', 'n': n, 'm': mval, 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
+        rows.append({'approach': 'benchmark', 'n': n, 'm': mval, 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
         print(f"[sweep] [{idx}/{total_combos}] DONE {tag}: {correct}/{total} = {acc:.3f}", flush=True)
 
     # Write CSV results

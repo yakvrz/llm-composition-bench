@@ -1,9 +1,9 @@
 {
-  "description": "Implicit test set for n={4,6,8}, m=4, seed=13, M=256, id_width=3",
+  "description": "n-hop test set for n={4,6,8}, m=4, seed=13, M=256, id_width=3",
   "items_per_file": 120,
   "files": [
     {
-      "path": "data/testsets/implicit_n4_m4_seed13.jsonl",
+      "path": "data/testsets/benchmark_n4_m4_seed13.jsonl",
       "n": 4,
       "m": 4,
       "seed": 13,
@@ -11,7 +11,7 @@
       "id_width": 3
     },
     {
-      "path": "data/testsets/implicit_n6_m4_seed13.jsonl",
+      "path": "data/testsets/benchmark_n6_m4_seed13.jsonl",
       "n": 6,
       "m": 4,
       "seed": 13,
@@ -19,7 +19,7 @@
       "id_width": 3
     },
     {
-      "path": "data/testsets/implicit_n8_m4_seed13.jsonl",
+      "path": "data/testsets/benchmark_n8_m4_seed13.jsonl",
       "n": 8,
       "m": 4,
       "seed": 13,
