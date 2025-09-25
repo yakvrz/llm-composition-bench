@@ -1,28 +1,28 @@
-# n-hop Composition Benchmark (Symbolic, Open-book)
+# n-hop Composition Benchmark
 
-**Goal:** benchmark pure compositional reasoning over n-hop chains in an open-book setting. The repository presents a polished, implicit-only pipeline: models receive a shuffled bag of facts (m disjoint chains) and must recover the composed answer without candidates.
+This repo tests implicit n-hop reasoning. Each item is a bag of facts covering m disjoint chains. The model must compose the correct tail without candidates.
 
-**Highlights**
-- Structured scripts for generation, evaluation, plotting, and diagnostics
-- Shared test sets (`data/testsets/`) for reproducible comparisons across models
-- Optional structured reasoning prompts plus OpenRouter integration out of the box
-- Baseline results for standard prompts vs. step-by-step scaffolds in [`RESULTS.md`](RESULTS.md)
+**Key pieces**
+- `implicit/` holds the generator and evaluator
+- `scripts/` wraps sweeps, plotting, and diagnostics
+- `data/testsets/` ships reusable splits (n 4, 6, 8 with m 4)
+- [`RESULTS.md`](RESULTS.md) logs baseline vs. structured reasoning runs
 
-**Terminology**
-- *Exact Match (EM)*: fraction of items answered with the correct final token.
-- *Lift over chance*: `(accuracy - 1/m) / (1 - 1/m)` for bag size `m`; measures improvement over random guessing.
-- *Structured reasoning prompt*: a template that asks the model to fill “Step i” lines for each hop before giving the final answer.
+**Shorthand**
+- EM = exact match accuracy
+- Lift = `(accuracy - 1/m) / (1 - 1/m)`
+- Structured reasoning prompt = template with step slots before the final answer
 
 ## What's included
 
-- `implicit/` — bag-of-facts generator and evaluator
-  - `implicit/generate.py` — emits n-hop chains with balanced relation counts across m distractors
-  - `implicit/evaluate.py` — queries the composed answer token using OpenAI's Responses API
-- `scripts/sweep.py` — implicit-only sweep utility (`runs/implicit/<tag>/` layout: data/, results/, plots/, results.csv)
-- `scripts/run_sweep.py` — orchestration helper to launch sweeps from JSON configs, plot results, index runs/index.csv, and emit brief reports
-- `scripts/plot_sweep.py` — plots accuracy and lift-over-chance vs. n (one curve per m)
-- `scripts/run_diagnostics.py` — quick variant runner (control / ablate / baseline, optional reasoning) for a single (n, m)
-- `tests/` — smoke tests for generation + evaluation
+- `implicit/`: generator and evaluator for the implicit setting
+  - `implicit/generate.py`: emits n-hop chains with balanced relation counts across m distractors
+  - `implicit/evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
+- `scripts/sweep.py`: sweep utility (`runs/implicit/<tag>/` layout: data/, results/, plots/, results.csv)
+- `scripts/run_sweep.py`: orchestrates sweeps, plotting, and reporting
+- `scripts/plot_sweep.py`: renders accuracy and lift curves vs. n
+- `scripts/run_diagnostics.py`: quick variant runner (control, ablate, baseline, optional reasoning)
+- `tests/`: smoke tests for generation and evaluation
 
 ## Data format (JSONL)
 
@@ -74,7 +74,7 @@ python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4 --seeds 13,27 --r
 
 ### Shared test set (n = 4/6/8, m = 4)
 
-To keep evaluations comparable, the repo caches implicit datasets under `data/testsets/` (seed 13, `M=256`, `id_width=3`). Reuse them instead of regenerating each run:
+To keep runs comparable, use the cached files under `data/testsets/` (seed 13, `M=256`, `id_width=3`).
 
 ```bash
 python implicit/evaluate.py \
@@ -85,11 +85,11 @@ python implicit/evaluate.py \
   --out runs/manual_eval/gpt-4o.jsonl
 ```
 
-You can still synthesize new splits via `implicit/generate.py`, but using the shared set avoids spending tokens repeatedly and guarantees apples-to-apples comparisons across models.
+You can still synthesize new splits, but reuse the cached ones unless you need fresh seeds.
 
 ### Using OpenRouter models
 
-`implicit/evaluate.py` will automatically route through OpenRouter when the following environment variables are present:
+`implicit/evaluate.py` routes through OpenRouter when these variables are present:
 
 ```
 export OPENROUTER_API_KEY=sk-or-...
@@ -98,7 +98,7 @@ export OPENAI_HTTP_REFERER=https://your.site
 export OPENAI_X_TITLE="lllm-comp"
 ```
 
-The client first tries the Responses API and falls back to Chat Completions when needed, so both OpenAI-hosted and OpenRouter-hosted models work out of the box.
+The client tries the Responses API first and falls back to Chat Completions if needed.
 
 ## Experiment runner
 
@@ -122,8 +122,8 @@ Runs are stored under `runs/implicit/sweep_<timestamp>/` with subfolders `data/`
 ## Plots
 
 `scripts/plot_sweep.py` writes two figures per sweep into `plots/`:
-- `lines_acc_vs_n_by_m.png` — mean exact-match accuracy vs. n with one curve per m
-- `lines_lift_vs_n_by_m.png` — lift over chance vs. n (same curves)
+- `lines_acc_vs_n_by_m.png`: mean accuracy vs. n for each m
+- `lines_lift_vs_n_by_m.png`: lift over chance vs. n for each m
 
 ## Tests
 
