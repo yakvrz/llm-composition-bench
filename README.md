@@ -1,6 +1,12 @@
 # n-hop Composition Benchmark (Symbolic, Open-book)
 
-**Goal:** measure pure compositional reasoning over n-hop chains in an open-book setting. The repo now focuses on the implicit regime only: a bag-of-facts prompt containing m disjoint chains whose first n−1 hops must be composed.
+**Goal:** benchmark pure compositional reasoning over n-hop chains in an open-book setting. The repository presents a polished, implicit-only pipeline: models receive a shuffled bag of facts (m disjoint chains) and must recover the composed answer without candidates.
+
+**Highlights**
+- Structured scripts for generation, evaluation, plotting, and diagnostics
+- Shared test sets (`data/testsets/`) for reproducible comparisons across models
+- Optional structured reasoning prompts plus OpenRouter integration out of the box
+- Baseline results for standard prompts vs. step-by-step scaffolds in [`RESULTS.md`](RESULTS.md)
 
 ## What's included
 
