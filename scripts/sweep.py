@@ -22,6 +22,13 @@ import sys
 from pathlib import Path
 
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+GENERATE_BIN = SCRIPT_DIR / 'generate.py'
+EVALUATE_BIN = SCRIPT_DIR / 'evaluate.py'
+
+
 def parse_list(arg: str) -> list[int]:
     return [int(x) for x in str(arg).split(',') if str(x).strip()]
 
@@ -122,7 +129,7 @@ def main():
         # 1) Generate
         print(f"[sweep] [{idx}/{total_combos}] GEN {tag} ...", flush=True)
         gen_cmd = [
-            sys.executable, 'generate.py',
+            sys.executable, str(GENERATE_BIN),
             '--items', str(args.items), '--hops', str(n), '--m', str(mval),
             '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
         ]
@@ -136,7 +143,7 @@ def main():
         # 2) Evaluate
         print(f"[sweep] [{idx}/{total_combos}] EVAL {tag} ...", flush=True)
         eval_cmd = [
-            sys.executable, 'evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+            sys.executable, str(EVALUATE_BIN), '--in', str(ds_path), '--out', str(res_path),
             '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
         ]

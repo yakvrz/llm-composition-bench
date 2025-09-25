@@ -8,9 +8,9 @@ Reads all results JSONL files under a sweep root's results/ directory and report
 - Pred token layer (L0..L_{n-1}) when derivable from facts
 
 Usage:
-  python analyze_errors.py --sweep_root runs/benchmark/sweep_YYYYMMDD_HHMMSS
+  python scripts/analyze_errors.py --sweep_root runs/benchmark/sweep_YYYYMMDD_HHMMSS
   or
-  python analyze_errors.py --results_csv runs/benchmark/sweep_.../results.csv
+  python scripts/analyze_errors.py --results_csv runs/benchmark/sweep_.../results.csv
 """
 import argparse, csv, json
 from pathlib import Path

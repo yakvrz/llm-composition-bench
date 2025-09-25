@@ -3,7 +3,7 @@
 This repo tests n-hop reasoning without candidates. Each item is a bag of facts covering m disjoint chains. The model must compose the correct tail using only those facts.
 
 **Key pieces**
-- `generate.py` and `evaluate.py` implement the pipeline
+- `scripts/generate.py` and `scripts/evaluate.py` implement the pipeline
 - `scripts/` wraps sweeps, plotting, and diagnostics
 - `data/testsets/` ships reusable splits (n 4, 6, 8 with m 4)
 - [`RESULTS.md`](RESULTS.md) logs baseline vs. structured reasoning runs
@@ -15,12 +15,13 @@ This repo tests n-hop reasoning without candidates. Each item is a bag of facts 
 
 ## What's included
 
-- `generate.py`: emits n-hop chains with balanced relation counts across m distractors
-- `evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
+- `scripts/generate.py`: emits n-hop chains with balanced relation counts across m distractors
+- `scripts/evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
 - `scripts/sweep.py`: sweep utility (`runs/benchmark/<tag>/` layout: data/, results/, plots/, results.csv)
 - `scripts/run_sweep.py`: orchestrates sweeps, plotting, and reporting
 - `scripts/plot_sweep.py`: renders accuracy and lift curves vs. n
 - `scripts/run_diagnostics.py`: quick variant runner (control, ablate, baseline, optional reasoning)
+- `scripts/analyze_errors.py`: aggregates non-EM diagnostics for completed runs
 - `tests/`: smoke tests for generation and evaluation
 
 ## Data format (JSONL)
@@ -59,8 +60,8 @@ OPENAI_API_KEY=sk-...
 
 Generate and evaluate a small dataset:
 ```bash
-python generate.py --items 200 --hops 5 --m 8 --M 512 --seed 123 --out data/benchmark.jsonl
-python evaluate.py --in data/benchmark.jsonl --out runs/benchmark_run.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 | tee runs/benchmark_run.log
+python scripts/generate.py --items 200 --hops 5 --m 8 --M 512 --seed 123 --out data/benchmark.jsonl
+python scripts/evaluate.py --in data/benchmark.jsonl --out runs/benchmark_run.jsonl --model gpt-4.1-mini --temp 0.0 --max_output_tokens 16 | tee runs/benchmark_run.log
 ```
 
 Sweep over n and m for a quick baseline:
@@ -76,7 +77,7 @@ python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4 --seeds 13,27 --r
 To keep runs comparable, use the cached files under `data/testsets/` (seed 13, `M=256`, `id_width=3`).
 
 ```bash
-python evaluate.py \
+python scripts/evaluate.py \
   --in data/testsets/benchmark_n4_m4_seed13.jsonl \
   --in data/testsets/benchmark_n6_m4_seed13.jsonl \
   --in data/testsets/benchmark_n8_m4_seed13.jsonl \
@@ -88,7 +89,7 @@ You can still synthesize new splits, but reuse the cached ones unless you need f
 
 ### Using OpenRouter models
 
-`evaluate.py` routes through OpenRouter when these variables are present:
+`scripts/evaluate.py` routes through OpenRouter when these variables are present:
 
 ```
 export OPENROUTER_API_KEY=sk-or-...

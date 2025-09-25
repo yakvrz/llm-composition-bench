@@ -15,7 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from typing import Any, Dict, List
 from collections import defaultdict
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    def load_dotenv(*_args, **_kwargs):
+        return False
 from openai import OpenAI
 from utils.eval import exact_match
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -152,11 +156,13 @@ def main():
     title = os.getenv("OPENAI_X_TITLE") or os.getenv("X_TITLE") or os.getenv("OPENROUTER_APP_NAME")
     if title:
         default_headers["X-Title"] = title
-    client = OpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        default_headers=default_headers or None,
-    )
+    client = None
+    if not args.baseline:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers=default_headers or None,
+        )
 
     items: List[Dict[str, Any]] = []
     for path in args.inputs:

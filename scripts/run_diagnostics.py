@@ -12,6 +12,10 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+GENERATE_BIN = SCRIPT_DIR / 'generate.py'
+EVALUATE_BIN = SCRIPT_DIR / 'evaluate.py'
+
 
 def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
@@ -154,7 +158,7 @@ def main():
         summary_txt = results_dir / f"summary_{tag}.txt"
 
         gen_cmd = [
-            sys.executable, 'generate.py',
+            sys.executable, str(GENERATE_BIN),
             '--items', str(args.items), '--hops', str(args.n), '--m', str(args.m),
             '--M', str(args.M), '--seed', str(args.seed), '--out', str(ds_path)
         ]
@@ -165,7 +169,7 @@ def main():
             sys.exit(rc)
 
         eval_cmd = [
-            sys.executable, 'evaluate.py', '--in', str(ds_path), '--out', str(res_path),
+            sys.executable, str(EVALUATE_BIN), '--in', str(ds_path), '--out', str(res_path),
             '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
         ]
