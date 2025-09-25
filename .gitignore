@@ -10,4 +10,7 @@ __pycache__/
 
 # Data & outputs
 data/
+!data/testsets/
+!data/testsets/*.jsonl
+!data/testsets/manifest.json
 runs/

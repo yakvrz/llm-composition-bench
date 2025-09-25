@@ -61,6 +61,34 @@ python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4,8,12 --seeds 7,13
 python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4 --seeds 13,27 --reasoning_steps --max_output_tokens 64
 ```
 
+### Shared test set (n = 4/6/8, m = 4)
+
+To keep evaluations comparable, the repo caches implicit datasets under `data/testsets/` (seed 13, `M=256`, `id_width=3`). Reuse them instead of regenerating each run:
+
+```bash
+python implicit/evaluate.py \
+  --in data/testsets/implicit_n4_m4_seed13.jsonl \
+  --in data/testsets/implicit_n6_m4_seed13.jsonl \
+  --in data/testsets/implicit_n8_m4_seed13.jsonl \
+  --model openai/gpt-4o --temp 0.0 --max_output_tokens 48 \
+  --out runs/manual_eval/gpt-4o.jsonl
+```
+
+You can still synthesize new splits via `implicit/generate.py`, but using the shared set avoids spending tokens repeatedly and guarantees apples-to-apples comparisons across models.
+
+### Using OpenRouter models
+
+`implicit/evaluate.py` will automatically route through OpenRouter when the following environment variables are present:
+
+```
+export OPENROUTER_API_KEY=sk-or-...
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_HTTP_REFERER=https://your.site
+export OPENAI_X_TITLE="lllm-comp"
+```
+
+The client first tries the Responses API and falls back to Chat Completions when needed, so both OpenAI-hosted and OpenRouter-hosted models work out of the box.
+
 ## Experiment runner
 
 Use `scripts/run_sweep.py` to manage sweeps, plots, and indexing:
@@ -102,3 +130,4 @@ python -m pytest -q tests/test_implicit.py
 
 - `scripts/sweep.py` and `scripts/run_sweep.py` now default to implicit-only behaviour.
 - Scratchpad prompting has been removed; prompts now present only the shuffled facts and the final answer line.
+- Shared evaluation sets live under `data/testsets/`; add new JSONL files there when you need additional seeds or hop counts.

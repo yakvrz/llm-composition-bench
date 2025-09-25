@@ -140,7 +140,23 @@ def main():
     ap.add_argument("--reasoning_steps", action="store_true", help="insert structured step-by-step slots before the final answer prompt")
     args = ap.parse_args()
 
-    client = OpenAI()
+    import os
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+    base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE")
+    if base_url is None and os.getenv("OPENROUTER_API_KEY"):
+        base_url = "https://openrouter.ai/api/v1"
+    default_headers = {}
+    referer = os.getenv("OPENAI_HTTP_REFERER") or os.getenv("HTTP_REFERER")
+    if referer:
+        default_headers["HTTP-Referer"] = referer
+    title = os.getenv("OPENAI_X_TITLE") or os.getenv("X_TITLE") or os.getenv("OPENROUTER_APP_NAME")
+    if title:
+        default_headers["X-Title"] = title
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        default_headers=default_headers or None,
+    )
 
     items: List[Dict[str, Any]] = []
     for path in args.inputs:
@@ -156,17 +172,102 @@ def main():
     lock = threading.Lock()
     fout = open(args.out, "w", encoding="utf-8") if args.out else None
 
+    def extract_from_response(resp):
+        if resp is None:
+            return ""
+        if isinstance(resp, str):
+            lower = resp.lower()
+            if "<html" in lower or "<!doctype" in lower:
+                return ""
+            return resp
+        text = getattr(resp, "output_text", None)
+        if text:
+            return text
+        output = getattr(resp, "output", None)
+        if output:
+            pieces: list[str] = []
+            for block in output:
+                content = getattr(block, "content", None) or block.get("content") if isinstance(block, dict) else None
+                if not content:
+                    continue
+                for part in content:
+                    if hasattr(part, "text"):
+                        pieces.append(part.text)
+                    elif isinstance(part, dict):
+                        if part.get("type") in ("output_text", "text") and part.get("text"):
+                            pieces.append(part["text"])
+            if pieces:
+                return "".join(pieces)
+        choices = getattr(resp, "choices", None)
+        if choices:
+            piece = choices[0]
+            message = getattr(piece, "message", None) or piece.get("message") if isinstance(piece, dict) else None
+            if message:
+                content = getattr(message, "content", None)
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    return "".join(seg.get("text", "") if isinstance(seg, dict) else str(seg) for seg in content)
+        return ""
+
+    def extract_from_chat(chat_resp):
+        if chat_resp is None:
+            return ""
+        choices = getattr(chat_resp, "choices", None)
+        if not choices:
+            return ""
+        message = choices[0].message if hasattr(choices[0], "message") else choices[0].get("message")
+        if message is None:
+            return ""
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(seg.get("text", "") if isinstance(seg, dict) else str(seg) for seg in content)
+        return ""
+
+    def send_prompt(prompt: str) -> str:
+        last_error = None
+        try:
+            resp = client.responses.create(
+                model=args.model,
+                input=prompt,
+                temperature=args.temp,
+                max_output_tokens=args.max_output_tokens,
+            )
+            text = extract_from_response(resp)
+            if text:
+                return text
+        except Exception as exc:
+            last_error = exc
+        # Fallback to chat completions
+        chat_resp = client.chat.completions.create(
+            model=args.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=args.temp,
+            max_tokens=args.max_output_tokens,
+        )
+        text = extract_from_chat(chat_resp)
+        if text:
+            return text
+        if last_error:
+            raise last_error
+        raise RuntimeError("Empty response from model")
+
     def call_model_with_retries(prompt: str):
         delay = float(args.retry_backoff)
+        last_err = None
         for attempt in range(1, int(args.max_retries) + 1):
             try:
-                resp = client.responses.create(model=args.model, input=prompt, temperature=args.temp, max_output_tokens=args.max_output_tokens)
-                return (resp, None)
+                text = send_prompt(prompt)
+                return text, None
             except Exception as e:
+                last_err = str(e)
                 if attempt >= int(args.max_retries):
-                    return (None, str(e))
+                    return "", last_err
                 _time.sleep(delay)
                 delay *= 2
+        return "", last_err
 
     def eval_one(idx: int, item: Dict[str, Any]):
         nonlocal printed_api_ok
@@ -193,9 +294,9 @@ def main():
                 last_prompt_local = ""; last_raw_local = ""
             else:
                 prompt = build_prompt(trial_item, reasoning_steps=bool(args.reasoning_steps))
-                resp, err = call_model_with_retries(prompt)
-                if resp is not None:
-                    raw_text = (resp.output_text or "").strip()
+                raw_text, err = call_model_with_retries(prompt)
+                if raw_text:
+                    raw_text = raw_text.strip()
                     pred_local = extract_token_from_response(raw_text)
                     err_local = None
                     last_prompt_local = prompt
