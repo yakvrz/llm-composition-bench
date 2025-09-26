@@ -166,7 +166,10 @@ def main():
 
     items: List[Dict[str, Any]] = []
     for path in args.inputs:
-        items.extend(iter_jsonl(path))
+        for obj in iter_jsonl(path):
+            # keep track of the dataset source for downstream logging
+            obj["_source_path"] = path
+            items.append(obj)
     if args.n and args.n > 0:
         items = items[: args.n]
 
@@ -336,6 +339,8 @@ def main():
             "facts_bag": item.get("facts_bag"),
             "order_trials": int(args.order_trials),
             "baseline": args.baseline or None,
+            "model": args.model,
+            "dataset": item.get("_source_path"),
         }
         if args.reasoning_steps:
             rec_local["reasoning_steps"] = True

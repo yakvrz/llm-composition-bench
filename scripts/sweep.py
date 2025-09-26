@@ -99,11 +99,14 @@ def main():
     ap.add_argument('--max_retries', type=int, default=3)
     ap.add_argument('--retry_backoff', type=float, default=1.0)
     ap.add_argument('--reasoning_steps', action='store_true', help='insert structured reasoning slots before final answer prompts')
+    ap.add_argument('--dataset_dir', type=str, default='', help='reuse pre-generated datasets from this directory (expects benchmark_n{n}_m{m}_seed{seed}.jsonl files)')
+    ap.add_argument('--sleep', type=float, default=0.0, help='sleep seconds between items during evaluation')
     args = ap.parse_args()
 
     hops_list = parse_list(args.hops)
     m_list = parse_list(args.m_list)
     seeds_list = parse_list(args.seeds)
+    dataset_dir = Path(args.dataset_dir).resolve() if args.dataset_dir else None
 
     ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
     run_root = Path('runs') / 'benchmark' / f'sweep_{ts}'
@@ -122,23 +125,33 @@ def main():
         n, mval, seed = combo
         tag = f"bench_n{n}_m{mval}_s{seed}"
         out_dir = run_root / tag
-        ds_path = data_dir / f"synth_{tag}.jsonl"
+        if dataset_dir:
+            ds_path = dataset_dir / f"benchmark_n{n}_m{mval}_seed{seed}.jsonl"
+        else:
+            ds_path = data_dir / f"synth_{tag}.jsonl"
         res_path = results_dir / f"results_{tag}.jsonl"
         sum_path = results_dir / f"summary_{tag}.txt"
+        ensure_dir(out_dir)
 
-        # 1) Generate
-        print(f"[sweep] [{idx}/{total_combos}] GEN {tag} ...", flush=True)
-        gen_cmd = [
-            sys.executable, str(GENERATE_BIN),
-            '--items', str(args.items), '--hops', str(n), '--m', str(mval),
-            '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
-        ]
-        if args.ablate_inner:
-            gen_cmd += ['--ablate_inner', '--ablate_hop', str(args.ablate_hop)]
-        rc = stream_cmd(gen_cmd)
-        if rc != 0:
-            print(f"[sweep] [{idx}/{total_combos}] GEN FAIL {tag}", flush=True)
-            continue
+        # 1) Prepare data (reuse or generate)
+        if dataset_dir:
+            if not ds_path.exists():
+                print(f"[sweep] [{idx}/{total_combos}] DATASET MISSING {ds_path}", flush=True)
+                continue
+            print(f"[sweep] [{idx}/{total_combos}] USE {ds_path} ...", flush=True)
+        else:
+            print(f"[sweep] [{idx}/{total_combos}] GEN {tag} ...", flush=True)
+            gen_cmd = [
+                sys.executable, str(GENERATE_BIN),
+                '--items', str(args.items), '--hops', str(n), '--m', str(mval),
+                '--M', str(args.M), '--id_width', str(args.id_width), '--seed', str(seed), '--out', str(ds_path),
+            ]
+            if args.ablate_inner:
+                gen_cmd += ['--ablate_inner', '--ablate_hop', str(args.ablate_hop)]
+            rc = stream_cmd(gen_cmd)
+            if rc != 0:
+                print(f"[sweep] [{idx}/{total_combos}] GEN FAIL {tag}", flush=True)
+                continue
 
         # 2) Evaluate
         print(f"[sweep] [{idx}/{total_combos}] EVAL {tag} ...", flush=True)
@@ -147,6 +160,8 @@ def main():
             '--model', args.model, '--temp', str(args.temp), '--max_output_tokens', str(args.max_output_tokens), '--n', str(args.items), '--order_trials', str(args.order_trials),
             '--concurrency', str(args.concurrency), '--max_retries', str(args.max_retries), '--retry_backoff', str(args.retry_backoff)
         ]
+        if args.sleep and args.sleep > 0:
+            eval_cmd += ['--sleep', str(args.sleep)]
         if args.baseline:
             eval_cmd += ['--baseline', args.baseline]
         if args.reasoning_steps:
@@ -160,13 +175,24 @@ def main():
 
         rc = stream_cmd(eval_cmd, log_path=sum_path, env=os.environ.copy())
         correct, total, acc = compute_em(res_path)
-        rows.append({'approach': 'benchmark', 'n': n, 'm': mval, 'seed': seed, 'items': total, 'correct': correct, 'acc': f"{acc:.3f}", 'dir': str(out_dir)})
+        rows.append({
+            'approach': 'benchmark',
+            'n': n,
+            'm': mval,
+            'seed': seed,
+            'items': total,
+            'correct': correct,
+            'acc': f"{acc:.3f}",
+            'dir': str(out_dir),
+            'model': args.model,
+            'dataset': str(ds_path),
+        })
         print(f"[sweep] [{idx}/{total_combos}] DONE {tag}: {correct}/{total} = {acc:.3f}", flush=True)
 
     # Write CSV results
     csv_path = run_root / 'results.csv'
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        fieldnames = ['approach','n','m','seed','items','correct','acc','dir']
+        fieldnames = ['approach','n','m','seed','items','correct','acc','dir','model','dataset']
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:

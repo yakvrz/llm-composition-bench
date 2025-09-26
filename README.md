@@ -5,8 +5,8 @@ This repo tests n-hop reasoning without candidates. Each item is a bag of facts 
 **Key pieces**
 - `scripts/generate.py` and `scripts/evaluate.py` implement the pipeline
 - `scripts/` wraps sweeps, plotting, and diagnostics
-- `data/testsets/` ships reusable splits (n 4, 6, 8 with m 4)
-- [`RESULTS.md`](RESULTS.md) logs baseline vs. structured reasoning runs
+- `data/testsets/` ships reusable splits, including the legacy m=4 set (`benchmark_n{4,6,8}_m4_seed13.jsonl`) and the roster set (`benchmark_n{2..10}_m6_seed7.jsonl`)
+- [`RESULTS.md`](RESULTS.md) logs baseline vs. structured reasoning runs and roster sweeps
 
 **Shorthand**
 - EM = exact match accuracy
@@ -16,8 +16,8 @@ This repo tests n-hop reasoning without candidates. Each item is a bag of facts 
 ## What's included
 
 - `scripts/generate.py`: emits n-hop chains with balanced relation counts across m distractors
-- `scripts/evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs
-- `scripts/sweep.py`: sweep utility (`runs/benchmark/<tag>/` layout: data/, results/, plots/, results.csv)
+- `scripts/evaluate.py`: queries the composed answer token using OpenAI or OpenRouter APIs (records `model` and `dataset` metadata per example)
+- `scripts/sweep.py`: sweep utility (`runs/benchmark/<tag>/` layout: data/, results/, plots/, results.csv); supports `--dataset_dir` to reuse pre-generated JSONL splits and `--sleep` to throttle API calls
 - `scripts/run_sweep.py`: orchestrates sweeps, plotting, and reporting
 - `scripts/plot_sweep.py`: renders accuracy and lift curves vs. n
 - `scripts/run_diagnostics.py`: quick variant runner (control, ablate, baseline, optional reasoning)
@@ -72,20 +72,28 @@ python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4,8,12 --seeds 7,13
 python scripts/sweep.py --items 60 --hops 4,5,6,7,8 --m_list 4 --seeds 13,27 --reasoning_steps --max_output_tokens 64
 ```
 
-### Shared test set (n = 4/6/8, m = 4)
+### Shared test sets
 
-To keep runs comparable, use the cached files under `data/testsets/` (seed 13, `M=256`, `id_width=3`).
+To keep runs comparable, reuse the cached files under `data/testsets/` instead of synthesizing for every sweep:
+
+- `benchmark_n{4,6,8}_m4_seed13.jsonl` — original public set (`seed=13`, `M=256`, `id_width=3`).
+- `benchmark_n{2..10}_m6_seed7.jsonl` — roster set introduced in the latest runs (`seed=7`, `M=512`, `id_width=4`).
+
+Example evaluation against the roster set:
 
 ```bash
 python scripts/evaluate.py \
-  --in data/testsets/benchmark_n4_m4_seed13.jsonl \
-  --in data/testsets/benchmark_n6_m4_seed13.jsonl \
-  --in data/testsets/benchmark_n8_m4_seed13.jsonl \
-  --model openai/gpt-4o --temp 0.0 --max_output_tokens 48 \
-  --out runs/manual_eval/gpt-4o.jsonl
+  --in data/testsets/benchmark_n2_m6_seed7.jsonl \
+  --in data/testsets/benchmark_n3_m6_seed7.jsonl \
+  ... \
+  --in data/testsets/benchmark_n10_m6_seed7.jsonl \
+  --model gpt-4.1 \
+  --temp 0.0 --max_output_tokens 16 \
+  --order_trials 1 --concurrency 4 \
+  --out runs/benchmark/gpt-4.1_m6.jsonl
 ```
 
-You can still synthesize new splits, but reuse the cached ones unless you need fresh seeds.
+Pass `--dataset_dir data/testsets` to `scripts/sweep.py` so every combination reads from the cached filenames (`benchmark_n{n}_m{m}_seed{seed}.jsonl`).
 
 ### Using OpenRouter models
 
@@ -121,9 +129,12 @@ Runs are stored under `runs/benchmark/sweep_<timestamp>/` with subfolders `data/
 
 ## Plots
 
-`scripts/plot_sweep.py` writes two figures per sweep into `plots/`:
-- `lines_acc_vs_n_by_m.png`: mean accuracy vs. n for each m
-- `lines_lift_vs_n_by_m.png`: lift over chance vs. n for each m
+- `scripts/plot_sweep.py` still writes per-sweep figures into each run directory.
+- Shared analysis artefacts live under `plots/`. The latest roster comparison (gpt-4.1, gpt-4.1-mini, qwen3-max, gemini-2.5-flash, grok-4-fast) is captured below:
+
+![Lift by model across n=2–10](plots/lift_by_model.png)
+
+Lift is normalized against the 1/m chance baseline; anything above 0 denotes better-than-random composition. Grok-4-fast remains perfect through n=10, while the other models degrade once hop depth exceeds six.
 
 ## Tests
 

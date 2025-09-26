@@ -41,3 +41,29 @@ The structured sweep records whether all reasoning steps were populated:
 1. Adjust the template or evaluator to enforce non-empty step slots and a separate final answer, preventing accidental credit from partial traces.
 2. Probe larger m values: see whether multi-chain distractors erode the structured benefits.
 3. Instrument reasoning tokens for error analysis (e.g., compare hop-level accuracy vs. final EM).
+
+---
+
+## Model roster sweep (m = 6, seed = 7)
+
+We reused the cached `benchmark_n{2..10}_m6_seed7.jsonl` splits to benchmark the latest model roster (all runs at `temp=0`, `max_output_tokens=16`). Lift is computed relative to the 1/6 chance baseline.
+
+| n | google/gemini-2.5-flash | gpt-4.1 | gpt-4.1-mini | qwen/qwen3-max | x-ai/grok-4-fast |
+|---|-------------------------|---------|--------------|----------------|------------------|
+| 2 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| 3 | 1.000 | 1.000 | 0.980 | 1.000 | 1.000 |
+| 4 | 0.980 | 1.000 | 0.817 | 0.980 | 1.000 |
+| 5 | 0.800 | 0.842 | 0.517 | 0.817 | 1.000 |
+| 6 | 0.500 | 0.456 | 0.044 | 0.442 | 1.000 |
+| 7 | 0.042 | 0.058 | -0.017 | 0.117 | 1.000 |
+| 8 | -0.058 | 0.042 | 0.017 | 0.100 | 0.983 |
+| 9 | -0.017 | 0.042 | 0.000 | 0.017 | 1.000 |
+| 10 | 0.000 | 0.017 | 0.083 | 0.042 | 1.000 |
+
+**Highlights**
+- Grok-4-fast stays at perfect lift through n=10, indicating it follows the entire chain deterministically even at depth 10.
+- gpt-4.1 and qwen3-max remain comfortably above chance through n=6, then degrade to ~0.04 lift by n=10.
+- gemini-2.5-flash collapses earlier (lift becomes negative at n≥8), while gpt-4.1-mini drops below chance beyond n=6 but still ekes out small gains at n=10.
+- The runs reuse a single deterministic dataset per n, and each JSONL record now logs its `model` and `dataset` to ease downstream analysis.
+
+See `plots/lift_by_model.png` (also embedded in the README) for the line plot across n.

@@ -15,3 +15,5 @@ data/
 !data/testsets/*.jsonl
 !data/testsets/manifest.json
 runs/
+plots/*
+!plots/lift_by_model.png
